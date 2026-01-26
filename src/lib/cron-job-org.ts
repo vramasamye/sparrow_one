@@ -161,10 +161,13 @@ export class CronJobOrgService {
 export async function setupMasterCronJob(): Promise<void> {
   const service = new CronJobOrgService()
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+  let appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
   if (!appUrl) {
     throw new Error("NEXT_PUBLIC_APP_URL or VERCEL_URL must be set")
   }
+
+  // Clean the URL: remove protocol and trailing slashes
+  appUrl = appUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')
 
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) {
