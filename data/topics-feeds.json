@@ -1,0 +1,460 @@
+{
+  "platform_name": "AI Social Media Auto-Publishing Platform",
+  "version": "1.0",
+  "last_updated": "2026-01-25",
+  "topics": [
+    {
+      "topic_id": "ai_ml",
+      "topic_name": "Artificial Intelligence & Machine Learning",
+      "description": "Latest news and developments in AI, machine learning, and deep learning",
+      "category": "Technology",
+      "update_frequency": "high",
+      "feeds": [
+        {
+          "source": "VentureBeat AI",
+          "url": "https://venturebeat.com/category/ai/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "MIT Technology Review - AI",
+          "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
+          "source": "AI Business",
+          "url": "https://aibusiness.com/rss.xml",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "AI News",
+          "url": "https://www.artificialintelligence-news.com/feed/rss/",
+          "reliability": "medium",
+          "content_type": "news"
+        },
+        {
+          "source": "MIT News - AI",
+          "url": "http://news.mit.edu/rss/topic/artificial-intelligence2",
+          "reliability": "high",
+          "content_type": "research"
+        },
+        {
+          "source": "Google AI Blog",
+          "url": "http://googleresearch.blogspot.com/atom.xml",
+          "reliability": "high",
+          "content_type": "research"
+        },
+        {
+          "source": "OpenAI Blog",
+          "url": "https://openai.com/blog/rss.xml",
+          "reliability": "high",
+          "content_type": "research"
+        }
+      ]
+    },
+    {
+      "topic_id": "business_entrepreneurship",
+      "topic_name": "Business & Entrepreneurship",
+      "description": "Business strategies, startup stories, and entrepreneurial insights",
+      "category": "Business",
+      "update_frequency": "medium",
+      "feeds": [
+        {
+          "source": "Harvard Business Review",
+          "url": "http://feeds.harvardbusiness.org/harvardbusiness?format=xml",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
+          "source": "Forbes Business",
+          "url": "https://www.forbes.com/business/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Entrepreneur Magazine",
+          "url": "https://www.entrepreneur.com/latest.rss",
+          "reliability": "high",
+          "content_type": "advice"
+        },
+        {
+          "source": "Fast Company",
+          "url": "https://www.fastcompany.com/rss.xml",
+          "reliability": "high",
+          "content_type": "innovation"
+        },
+        {
+          "source": "BBC Business",
+          "url": "http://feeds.bbci.co.uk/news/business/rss.xml",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Business Insider",
+          "url": "https://www.businessinsider.com/rss",
+          "reliability": "medium",
+          "content_type": "news"
+        }
+      ]
+    },
+    {
+      "topic_id": "technology_startups",
+      "topic_name": "Technology & Startups",
+      "description": "Tech industry news, startup launches, and innovation stories",
+      "category": "Technology",
+      "update_frequency": "high",
+      "feeds": [
+        {
+          "source": "TechCrunch",
+          "url": "https://techcrunch.com/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "TechCrunch - Startups",
+          "url": "https://techcrunch.com/category/startups/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "The Verge",
+          "url": "https://www.theverge.com/rss/index.xml",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Wired",
+          "url": "https://www.wired.com/feed/rss",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
+          "source": "Ars Technica",
+          "url": "http://feeds.arstechnica.com/arstechnica/index/",
+          "reliability": "high",
+          "content_type": "technical"
+        },
+        {
+          "source": "Hacker News (Top Stories)",
+          "url": "https://news.ycombinator.com/rss",
+          "reliability": "high",
+          "content_type": "community"
+        },
+        {
+          "source": "Product Hunt",
+          "url": "https://www.producthunt.com/feed",
+          "reliability": "high",
+          "content_type": "products"
+        }
+      ]
+    },
+    {
+      "topic_id": "finance_investing",
+      "topic_name": "Finance & Investing",
+      "description": "Financial markets, investment strategies, and economic news",
+      "category": "Finance",
+      "update_frequency": "high",
+      "feeds": [
+        {
+          "source": "Bloomberg Markets",
+          "url": "https://feeds.bloomberg.com/markets/news.rss",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "MarketWatch",
+          "url": "https://www.marketwatch.com/rss/topstories",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "WSJ Business",
+          "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Financial Times",
+          "url": "https://www.ft.com/?format=rss",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Forbes - Fintech",
+          "url": "https://www.forbes.com/fintech/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "The Economist",
+          "url": "https://www.economist.com/latest/rss.xml",
+          "reliability": "high",
+          "content_type": "analysis"
+        }
+      ]
+    },
+    {
+      "topic_id": "marketing_social_media",
+      "topic_name": "Marketing & Social Media",
+      "description": "Digital marketing trends, social media strategies, and content marketing",
+      "category": "Marketing",
+      "update_frequency": "medium",
+      "feeds": [
+        {
+          "source": "HubSpot Marketing Blog",
+          "url": "https://blog.hubspot.com/marketing/rss.xml",
+          "reliability": "high",
+          "content_type": "education"
+        },
+        {
+          "source": "Social Media Examiner",
+          "url": "https://www.socialmediaexaminer.com/feed/",
+          "reliability": "high",
+          "content_type": "how-to"
+        },
+        {
+          "source": "Moz Blog",
+          "url": "https://moz.com/posts/rss/blog",
+          "reliability": "high",
+          "content_type": "seo"
+        },
+        {
+          "source": "Content Marketing Institute",
+          "url": "https://contentmarketinginstitute.com/feed/",
+          "reliability": "high",
+          "content_type": "strategy"
+        },
+        {
+          "source": "CopyHackers",
+          "url": "https://copyhackers.com/feed/",
+          "reliability": "medium",
+          "content_type": "copywriting"
+        },
+        {
+          "source": "Marketing Land",
+          "url": "https://marketingland.com/feed/",
+          "reliability": "medium",
+          "content_type": "news"
+        }
+      ]
+    },
+    {
+      "topic_id": "health_wellness",
+      "topic_name": "Health & Wellness",
+      "description": "Health tips, wellness trends, fitness, and mental health",
+      "category": "Lifestyle",
+      "update_frequency": "medium",
+      "feeds": [
+        {
+          "source": "MyFitnessPal Blog",
+          "url": "https://blog.myfitnesspal.com/feed",
+          "reliability": "high",
+          "content_type": "fitness"
+        },
+        {
+          "source": "Harvard Health Publishing",
+          "url": "https://www.health.harvard.edu/blog/feed",
+          "reliability": "high",
+          "content_type": "medical"
+        },
+        {
+          "source": "MindBodyGreen",
+          "url": "https://www.mindbodygreen.com/rss",
+          "reliability": "medium",
+          "content_type": "wellness"
+        },
+        {
+          "source": "Well+Good",
+          "url": "https://www.wellandgood.com/feed/",
+          "reliability": "medium",
+          "content_type": "lifestyle"
+        },
+        {
+          "source": "Calm Blog",
+          "url": "https://blog.calm.com/blog?format=rss",
+          "reliability": "high",
+          "content_type": "mindfulness"
+        },
+        {
+          "source": "Breaking Muscle",
+          "url": "https://breakingmuscle.com/feed",
+          "reliability": "medium",
+          "content_type": "fitness"
+        }
+      ]
+    },
+    {
+      "topic_id": "sustainability_climate",
+      "topic_name": "Sustainability & Climate Tech",
+      "description": "Climate technology, sustainability innovations, and environmental news",
+      "category": "Technology",
+      "update_frequency": "medium",
+      "feeds": [
+        {
+          "source": "TechCrunch - Climate",
+          "url": "https://techcrunch.com/category/climate/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "MIT Technology Review - Climate Change",
+          "url": "https://www.technologyreview.com/topic/climate-change/feed",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
+          "source": "BBC Science & Environment",
+          "url": "http://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "The Verge - Science",
+          "url": "https://www.theverge.com/rss/science/index.xml",
+          "reliability": "high",
+          "content_type": "news"
+        }
+      ]
+    },
+    {
+      "topic_id": "cybersecurity",
+      "topic_name": "Cybersecurity",
+      "description": "Security threats, data protection, and cybersecurity trends",
+      "category": "Technology",
+      "update_frequency": "high",
+      "feeds": [
+        {
+          "source": "TechCrunch - Security",
+          "url": "https://techcrunch.com/category/security/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "The Verge - Cyber Security",
+          "url": "https://www.theverge.com/rss/cyber-security/index.xml",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Forbes - Cybersecurity",
+          "url": "https://www.forbes.com/cybersecurity/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Ars Technica - Security",
+          "url": "https://arstechnica.com/security/feed/",
+          "reliability": "high",
+          "content_type": "technical"
+        }
+      ]
+    },
+    {
+      "topic_id": "gaming_entertainment",
+      "topic_name": "Gaming & Entertainment",
+      "description": "Video games, entertainment industry, and pop culture",
+      "category": "Entertainment",
+      "update_frequency": "medium",
+      "feeds": [
+        {
+          "source": "Forbes - Gaming",
+          "url": "https://www.forbes.com/gaming/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "TechCrunch - Media & Entertainment",
+          "url": "https://techcrunch.com/category/media-entertainment/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "BBC Entertainment & Arts",
+          "url": "http://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml",
+          "reliability": "high",
+          "content_type": "news"
+        }
+      ]
+    },
+    {
+      "topic_id": "leadership_productivity",
+      "topic_name": "Leadership & Productivity",
+      "description": "Leadership skills, productivity hacks, and professional development",
+      "category": "Business",
+      "update_frequency": "medium",
+      "feeds": [
+        {
+          "source": "HBR - Leadership",
+          "url": "https://hbr.org/topic/leadership/feed",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
+          "source": "HBR - Productivity",
+          "url": "https://hbr.org/topic/productivity/feed",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
+          "source": "HBR - Managing Yourself",
+          "url": "https://hbr.org/topic/managing-yourself/feed",
+          "reliability": "high",
+          "content_type": "advice"
+        },
+        {
+          "source": "Forbes - Leadership",
+          "url": "https://www.forbes.com/leadership/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Zen Habits",
+          "url": "https://zenhabits.net/feed/",
+          "reliability": "medium",
+          "content_type": "productivity"
+        }
+      ]
+    },
+    {
+      "topic_id": "saas_enterprise",
+      "topic_name": "SaaS & Enterprise Tech",
+      "description": "Cloud computing, enterprise software, and B2B technology",
+      "category": "Technology",
+      "update_frequency": "medium",
+      "feeds": [
+        {
+          "source": "TechCrunch - Enterprise",
+          "url": "https://techcrunch.com/category/enterprise/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "TechCrunch - Cloud Computing",
+          "url": "https://techcrunch.com/tag/cloud-computing/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Forbes - Cloud",
+          "url": "https://www.forbes.com/cloud/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "VentureBeat",
+          "url": "https://venturebeat.com/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "total_topics": 11,
+    "total_feeds": 67,
+    "format_version": "1.0",
+    "notes": "All feeds verified as of January 2026. Update frequencies: high (check every 30-60 min), medium (check every 2-4 hours)"
+  }
+}
