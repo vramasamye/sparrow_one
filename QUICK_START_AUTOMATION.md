@@ -59,34 +59,23 @@ This will:
 
 ## 🔧 Setup Cron Jobs
 
-### Option A: Vercel Cron (Recommended)
+### Option A: cron-job.org (Recommended)
 
-Create `vercel.json` in project root:
+Sparrow uses [cron-job.org](https://cron-job.org) for reliable scheduled tasks:
 
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/process-feeds",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/process-queue",
-      "schedule": "*/10 * * * *"
-    },
-    {
-      "path": "/api/cron/publish-posts",
-      "schedule": "* * * * *"
-    }
-  ]
-}
-```
+1. **Sign up** at [cron-job.org](https://cron-job.org) (free account)
+2. **Get API key** from [Console Settings](https://console.cron-job.org/settings)
+3. **Add to environment**: `CRON_JOB_ORG_API_KEY=your_key_here`
+4. **Deploy to Vercel** (or your hosting platform)
+5. **Setup cron**: Run `npm run setup-cron`
 
-Deploy to Vercel and crons will run automatically!
+This creates a master cron job that runs daily at midnight UTC and handles all tasks.
 
-### Option B: External Cron Service
+See [CRON_SETUP.md](./CRON_SETUP.md) for detailed instructions.
 
-Use **cron-job.org** or **EasyCron**:
+### Option B: Other External Cron Service
+
+Use **EasyCron**, **GitHub Actions**, or similar:
 
 **Job 1: Feed Fetching (Every hour)**
 ```

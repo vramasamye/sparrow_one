@@ -27,7 +27,7 @@ export async function enqueueApprovedFeed(feedId: string, approvedBy: string): P
   }
 
   // Add to sorted set (sorted by timestamp for FIFO)
-  await redis.zadd(QUEUE_KEY, job.priority, JSON.stringify(job))
+  await redis.zadd(QUEUE_KEY, job.priority ?? Date.now(), JSON.stringify(job))
 
   console.log(`✅ Enqueued feed ${feedId} for processing`)
 }

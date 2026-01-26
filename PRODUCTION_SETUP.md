@@ -18,8 +18,10 @@ Set these in your Vercel Project Settings:
 - `REDIS_URL`: Your production Redis connection string (e.g., `redis://default:password@host:port`).
 - `NEXTAUTH_SECRET`: Generate with `openssl rand -base64 32`.
 - `NEXTAUTH_URL`: Your production domain (e.g., `https://sparrow.yourdomain.com`).
+- `NEXT_PUBLIC_APP_URL`: Your production domain (e.g., `https://sparrow.yourdomain.com`).
 - `ENCRYPTION_KEY`: A 32-character hex string for encrypting tokens. Generate with `openssl rand -hex 32`.
 - `CRON_SECRET`: A secure random string to authorize cron jobs. Generate with `openssl rand -base64 32`.
+- `CRON_JOB_ORG_API_KEY`: Get from [cron-job.org Console](https://console.cron-job.org/settings) - API section.
 
 ### AI Providers
 - `GROQ_API_KEY`: Your production Groq API key.
@@ -44,24 +46,42 @@ Sparrow uses Prisma. In production, you must use Migrations instead of `db push`
 2. **Commit the `prisma/migrations` folder** to your repository.
 3. **Automate Deployments**: The build script in `package.json` should include `prisma migrate deploy`.
 
-## 4. Vercel Configuration
+## 4. Cron Job Configuration
 
-The `vercel.json` is already configured with the following cron jobs:
-- `/api/cron/process-feeds`: Every 2 hours (Fetches RSS content).
-- `/api/cron/process-queue`: Every 10 minutes (Generates AI content for approved feeds).
-- `/api/cron/publish-posts`: Every 5 minutes (Publishes scheduled posts).
-- `/api/cron/refresh-tokens`: Every 6 hours (Refreshes social OAuth tokens).
-- `/api/cron/cleanup`: Daily (Removes old logs and temporary data).
+Sparrow uses [cron-job.org](https://cron-job.org) for scheduled tasks instead of Vercel's built-in cron:
+
+**Benefits:**
+- Works with Vercel Hobby plan (no cron limitations)
+- 100 free cron executions per day
+- Reliable monitoring and execution history
+- Easy to manage via web console
+
+**Setup:**
+1. Create a free account at [cron-job.org](https://cron-job.org)
+2. Generate an API key from [Console Settings](https://console.cron-job.org/settings)
+3. Add `CRON_JOB_ORG_API_KEY` to your Vercel environment variables
+4. After deployment, run: `npm run setup-cron` to configure the cron job
+
+The master cron job runs daily at midnight UTC and executes:
+- Token refresh
+- RSS feed processing
+- Queue processing
+- Post publishing
+- Cleanup tasks
+
+See [CRON_SETUP.md](./CRON_SETUP.md) for detailed instructions.
 
 ## 5. Deployment Steps
 
 1. **Push your code** to GitHub/GitLab/Bitbucket.
 2. **Connect to Vercel**: Import the project.
-3. **Configure Environment Variables** in the Vercel dashboard.
+3. **Configure Environment Variables** in the Vercel dashboard (including `CRON_JOB_ORG_API_KEY`).
 4. **Deploy**: Vercel will run the build command and set up the edge functions.
-5. **Verify**:
+5. **Setup Cron Jobs**: After deployment, run `npm run setup-cron` locally to configure cron-job.org.
+6. **Verify**:
    - Check the `/api/health` endpoint.
-   - Run a manual cron trigger using `curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://yourdomain.com/api/cron/process-feeds`.
+   - Visit [cron-job.org Console](https://console.cron-job.org) to verify the job is created.
+   - Run a manual cron trigger: `curl "https://yourdomain.com/api/cron/master?secret=YOUR_CRON_SECRET"`.
 
 ## 6. Monitoring & Maintenance
 

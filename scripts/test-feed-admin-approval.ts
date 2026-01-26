@@ -230,7 +230,7 @@ async function main() {
 
     log("✅", `Selected item: "${feedItem.title}"`, colors.green)
     log("📄", `URL: ${feedItem.url}`, colors.blue)
-    log("📅", `Published: ${feedItem.publishedAt.toISOString()}`, colors.blue)
+    log("📅", `Published: ${feedItem.publishedAt?.toISOString() || 'N/A'}`, colors.blue)
     log("🔖", `Status: ${feedItem.status}`, colors.yellow)
 
     // Step 6: Admin approves the item

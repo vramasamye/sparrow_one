@@ -83,37 +83,29 @@ for (let i = 0; i < feeds.length; i += batchSize) {
 
 ## Cron Job Setup
 
-### Vercel Cron (Recommended)
+### cron-job.org (Recommended)
 
-Add to `vercel.json`:
+Sparrow uses [cron-job.org](https://cron-job.org) for scheduled tasks. See [CRON_SETUP.md](./CRON_SETUP.md) for setup instructions.
 
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/process-feeds",
-      "schedule": "0 * * * *"
-    }
-  ]
-}
-```
+Quick setup:
+1. Get API key from [cron-job.org Console](https://console.cron-job.org/settings)
+2. Set `CRON_JOB_ORG_API_KEY` in your environment
+3. Run `npm run setup-cron` after deployment
 
-This runs every hour at minute 0.
+The master cron job runs daily at midnight UTC and handles all tasks sequentially.
 
-### External Cron Service
+### Alternative: External Cron Service
 
-Use a service like:
-- **Cron-job.org**
+You can also use other services like:
 - **EasyCron**
 - **GitHub Actions**
+- **Your own cron server**
 
 Configuration:
 ```
-URL: https://yourdomain.com/api/cron/process-feeds
-Method: GET or POST
-Headers:
-  Authorization: Bearer YOUR_CRON_SECRET
-Schedule: 0 * * * * (every hour)
+URL: https://yourdomain.com/api/cron/master?secret=YOUR_CRON_SECRET
+Method: GET
+Schedule: Daily (or as needed)
 ```
 
 ### Server Crontab

@@ -259,7 +259,7 @@ sparrow.one/
 │   └── seed.ts              # Seed data
 ├── scripts/                 # Setup scripts
 ├── docker-compose.yml       # Docker config
-├── vercel.json              # Vercel cron config
+├── vercel.json              # Vercel deployment config
 └── .env.example             # Environment template
 ```
 

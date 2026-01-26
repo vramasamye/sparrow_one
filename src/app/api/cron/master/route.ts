@@ -8,15 +8,21 @@ import { generatePostsForFeed } from "@/lib/auto-generator"
 import { distributeToSubscribers } from "@/lib/auto-scheduler"
 
 function verifyCronSecret(request: NextRequest): boolean {
-  const authHeader = request.headers.get("authorization")
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return process.env.NODE_ENV === "development"
-  return authHeader === `Bearer ${cronSecret}`
+
+  // Support both Authorization header and query parameter
+  const authHeader = request.headers.get("authorization")
+  const { searchParams } = new URL(request.url)
+  const querySecret = searchParams.get("secret")
+
+  return authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret
 }
 
 /**
- * Master Cron Job for Vercel Hobby Plan
+ * Master Cron Job (triggered by cron-job.org)
  * Runs all tasks sequentially once per day
+ * Authentication via Bearer token or query parameter
  */
 export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
