@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma"
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
 
@@ -26,7 +26,7 @@ export async function DELETE(
   }
 
   try {
-    const { id } = params
+    const { id } = await params
 
     // Check if topic has RSS feeds or content
     const topic = await prisma.topic.findUnique({

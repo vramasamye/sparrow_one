@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma"
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
 
@@ -26,7 +26,7 @@ export async function PATCH(
   }
 
   try {
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     const { name, url, isActive } = body
 
@@ -74,7 +74,7 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
 
@@ -93,7 +93,7 @@ export async function DELETE(
   }
 
   try {
-    const { id } = params
+    const { id } = await params
 
     await prisma.rssFeed.delete({
       where: { id },
