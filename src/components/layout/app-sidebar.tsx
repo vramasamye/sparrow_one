@@ -3,6 +3,7 @@
 import {
   BarChart3,
   Calendar,
+  FolderOpen,
   Home,
   Newspaper,
   Rss,
@@ -55,6 +56,11 @@ const adminNavItems = [
     title: "Feed Approval",
     url: "/admin/feeds",
     icon: Rss,
+  },
+  {
+    title: "Topics & Feeds",
+    url: "/admin/topics",
+    icon: FolderOpen,
   },
   {
     title: "Users",
