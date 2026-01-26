@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     // Seed RSS feeds
     if (aiTopic) {
-      await prisma.rSSFeed.createMany({
+      await prisma.rssFeed.createMany({
         data: [
           {
             name: "OpenAI Blog",
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (webDevTopic) {
-      await prisma.rSSFeed.createMany({
+      await prisma.rssFeed.createMany({
         data: [
           {
             name: "Vercel Blog",
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const feedCount = await prisma.rSSFeed.count()
+    const feedCount = await prisma.rssFeed.count()
 
     return NextResponse.json({
       success: true,
