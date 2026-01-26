@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Trash2, ToggleLeft, ToggleRight, Rss } from "lucide-react"
+import { Plus, Trash2, ToggleLeft, ToggleRight, Rss, ExternalLink } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -340,9 +340,16 @@ export function TopicsList() {
                     >
                       <div className="flex-1">
                         <p className="font-medium">{feed.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {feed.url}
-                        </p>
+                        <a
+                          href={feed.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 max-w-full"
+                          title={feed.url}
+                        >
+                          <span className="truncate">{feed.url}</span>
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                        </a>
                         {feed.lastFetchedAt && (
                           <p className="text-xs text-muted-foreground mt-1">
                             Last fetched:{" "}
