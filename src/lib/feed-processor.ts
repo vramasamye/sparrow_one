@@ -7,7 +7,7 @@ export interface ProcessingResult {
   success: boolean
   newItems: number
   duplicates: number
-  skipped: number // Items skipped (no date or >24h old)
+  skipped: number // Items skipped (no date, outside time window, or already fetched)
   error?: string
 }
 
@@ -15,7 +15,9 @@ export interface ProcessingResult {
  * Process all active RSS feeds (ONLY for topics with active subscribers)
  * This reduces API usage by only fetching feeds users are interested in
  *
- * IMPORTANT: Only processes feeds fetched in the last 24 hours
+ * Time-based filtering:
+ * - First pull (lastSuccessAt is null): Fetches all January 2026 articles
+ * - Subsequent pulls: Fetches only articles published after lastSuccessAt
  */
 export async function processAllFeeds(): Promise<ProcessingResult[]> {
   // Get topics that have at least one user subscribed
@@ -126,12 +128,18 @@ export async function processSingleFeed(
   }
 
   try {
+    // Get the feed to check lastSuccessAt
+    const feed = await prisma.rssFeed.findUnique({
+      where: { id: feedId },
+      select: { lastSuccessAt: true }
+    })
+
     // Parse the feed
     const items = await parseFeed(feedUrl)
 
     // Process each item
     for (const item of items) {
-      const status = await addFeedItem(topicId, feedId, item)
+      const status = await addFeedItem(topicId, feedId, item, feed?.lastSuccessAt)
 
       if (status === 'added') {
         result.newItems++
@@ -175,11 +183,16 @@ export async function processSingleFeed(
 /**
  * Add a feed item if it doesn't already exist
  * Returns: 'added' | 'duplicate' | 'skipped'
+ *
+ * Time-based filtering:
+ * - First pull (lastSuccessAt is null): Get all January 2026 articles
+ * - Subsequent pulls: Get articles published after lastSuccessAt
  */
 async function addFeedItem(
   topicId: string,
   rssFeedId: string,
-  item: ParsedFeedItem
+  item: ParsedFeedItem,
+  lastSuccessAt: Date | null | undefined
 ): Promise<'added' | 'duplicate' | 'skipped'> {
   try {
     // SKIP if no publishedAt date
@@ -188,11 +201,23 @@ async function addFeedItem(
       return 'skipped'
     }
 
-    // SKIP if older than 24 hours
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    if (new Date(item.publishedAt) < twentyFourHoursAgo) {
-      console.log(`⏭️  Skipping old item (${item.publishedAt}): "${item.title.substring(0, 50)}..."`)
-      return 'skipped'
+    const itemDate = new Date(item.publishedAt)
+
+    // Time-based filtering logic
+    if (lastSuccessAt === null || lastSuccessAt === undefined) {
+      // FIRST PULL: Get articles from the last 30 days
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+
+      if (itemDate < thirtyDaysAgo) {
+        console.log(`⏭️  Skipping item (first pull - older than 30 days): "${item.title.substring(0, 50)}..."`)
+        return 'skipped'
+      }
+    } else {
+      // SUBSEQUENT PULLS: Only get items published after last successful fetch
+      if (itemDate <= lastSuccessAt) {
+        console.log(`⏭️  Skipping item (already fetched): "${item.title.substring(0, 50)}..."`)
+        return 'skipped'
+      }
     }
 
     // Check if item already exists by content hash

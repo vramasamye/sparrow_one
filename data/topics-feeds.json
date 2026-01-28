@@ -1,7 +1,7 @@
 {
   "platform_name": "AI Social Media Auto-Publishing Platform",
-  "version": "1.0",
-  "last_updated": "2026-01-25",
+  "version": "1.1",
+  "last_updated": "2026-01-28",
   "topics": [
     {
       "topic_id": "ai_ml",
@@ -23,20 +23,14 @@
           "content_type": "analysis"
         },
         {
-          "source": "AI Business",
-          "url": "https://aibusiness.com/rss.xml",
+          "source": "KDnuggets",
+          "url": "https://www.kdnuggets.com/feed",
           "reliability": "high",
-          "content_type": "news"
+          "content_type": "technical"
         },
         {
-          "source": "AI News",
-          "url": "https://www.artificialintelligence-news.com/feed/rss/",
-          "reliability": "medium",
-          "content_type": "news"
-        },
-        {
-          "source": "MIT News - AI",
-          "url": "http://news.mit.edu/rss/topic/artificial-intelligence2",
+          "source": "Berkeley AI Research (BAIR)",
+          "url": "https://bair.berkeley.edu/blog/feed.xml",
           "reliability": "high",
           "content_type": "research"
         },
@@ -51,6 +45,12 @@
           "url": "https://openai.com/blog/rss.xml",
           "reliability": "high",
           "content_type": "research"
+        },
+        {
+          "source": "AI Business",
+          "url": "https://aibusiness.com/rss.xml",
+          "reliability": "high",
+          "content_type": "news"
         }
       ]
     },
@@ -293,22 +293,34 @@
       "update_frequency": "medium",
       "feeds": [
         {
+          "source": "CleanTechnica",
+          "url": "https://cleantechnica.com/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
           "source": "TechCrunch - Climate",
           "url": "https://techcrunch.com/category/climate/feed/",
           "reliability": "high",
           "content_type": "news"
         },
         {
-          "source": "MIT Technology Review - Climate Change",
-          "url": "https://www.technologyreview.com/topic/climate-change/feed",
+          "source": "GreenBiz",
+          "url": "https://www.greenbiz.com/rss.xml",
+          "reliability": "high",
+          "content_type": "business"
+        },
+        {
+          "source": "Yale Climate Connections",
+          "url": "https://yaleclimateconnections.org/feed",
           "reliability": "high",
           "content_type": "analysis"
         },
         {
-          "source": "BBC Science & Environment",
-          "url": "http://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+          "source": "MIT Technology Review - Climate Change",
+          "url": "https://www.technologyreview.com/topic/climate-change/feed",
           "reliability": "high",
-          "content_type": "news"
+          "content_type": "analysis"
         },
         {
           "source": "The Verge - Science",
@@ -425,6 +437,24 @@
       "update_frequency": "medium",
       "feeds": [
         {
+          "source": "SaaStr",
+          "url": "https://www.saastr.com/feed/",
+          "reliability": "high",
+          "content_type": "strategy"
+        },
+        {
+          "source": "SaaStock",
+          "url": "https://www.saastock.com/feed/",
+          "reliability": "high",
+          "content_type": "business"
+        },
+        {
+          "source": "The Register",
+          "url": "https://www.theregister.com/headlines.atom",
+          "reliability": "high",
+          "content_type": "technical"
+        },
+        {
           "source": "TechCrunch - Enterprise",
           "url": "https://techcrunch.com/category/enterprise/feed/",
           "reliability": "high",
@@ -441,20 +471,14 @@
           "url": "https://www.forbes.com/cloud/feed/",
           "reliability": "high",
           "content_type": "news"
-        },
-        {
-          "source": "VentureBeat",
-          "url": "https://venturebeat.com/feed/",
-          "reliability": "high",
-          "content_type": "news"
         }
       ]
     }
   ],
   "metadata": {
     "total_topics": 11,
-    "total_feeds": 67,
-    "format_version": "1.0",
-    "notes": "All feeds verified as of January 2026. Update frequencies: high (check every 30-60 min), medium (check every 2-4 hours)"
+    "total_feeds": 69,
+    "format_version": "1.1",
+    "notes": "Feeds updated January 28, 2026. Added high-relevance sources for AI, SaaS, and Sustainability."
   }
 }

@@ -43,3 +43,8 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+// Support POST for flexibility
+export async function POST(request: NextRequest) {
+  return GET(request)
+}
