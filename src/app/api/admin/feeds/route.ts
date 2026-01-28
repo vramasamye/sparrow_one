@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { enqueueApprovedFeed } from "@/lib/queue"
 
 export async function GET(request: Request) {
   const session = await auth()
@@ -60,6 +61,77 @@ export async function GET(request: Request) {
     console.error("Error fetching feeds:", error)
     return NextResponse.json(
       { error: "Failed to fetch feeds" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(request: Request) {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    const body = await request.json()
+    const { feedIds, action } = body
+
+    if (!Array.isArray(feedIds) || feedIds.length === 0) {
+      return NextResponse.json(
+        { error: "No feed IDs provided" },
+        { status: 400 }
+      )
+    }
+
+    if (!action || !["approve", "reject"].includes(action)) {
+      return NextResponse.json(
+        { error: "Invalid action. Use 'approve' or 'reject'" },
+        { status: 400 }
+      )
+    }
+
+    if (action === "approve") {
+      // 1. Update all to APPROVED
+      await prisma.feed.updateMany({
+        where: { id: { in: feedIds } },
+        data: {
+          status: "APPROVED",
+          approvedAt: new Date(),
+          approvedBy: session.user.id,
+          rejectionReason: null,
+        },
+      })
+
+      // 2. Enqueue each feed individually (queue requires feedId)
+      // We do this concurrently but without waiting for all to finish if we want to be fast,
+      // but waiting ensures we catch queue errors.
+      const queuePromises = feedIds.map(async (id) => {
+        try {
+          await enqueueApprovedFeed(id, session.user.id!)
+          console.log(`✅ Bulk approved: Feed ${id} queued`)
+        } catch (error) {
+          console.error(`❌ Failed to enqueue feed ${id}:`, error)
+        }
+      })
+      await Promise.all(queuePromises)
+
+    } else {
+      // Reject all
+      await prisma.feed.updateMany({
+        where: { id: { in: feedIds } },
+        data: {
+          status: "REJECTED",
+          rejectionReason: "Bulk rejection by admin",
+        },
+      })
+    }
+
+    return NextResponse.json({ success: true, count: feedIds.length })
+  } catch (error) {
+    console.error("Error updating feeds:", error)
+    return NextResponse.json(
+      { error: "Failed to update feeds" },
       { status: 500 }
     )
   }
