@@ -5,6 +5,8 @@ import { processAllFeeds, getProcessingStats, cleanupOldFeeds } from "@/lib/feed
 // Verify cron secret to prevent unauthorized access
 function verifyCronSecret(request: Request): boolean {
   const authHeader = request.headers.get("authorization")
+  const url = new URL(request.url)
+  const secretParam = url.searchParams.get("secret")
   const cronSecret = process.env.CRON_SECRET
 
   if (!cronSecret) {
@@ -12,7 +14,17 @@ function verifyCronSecret(request: Request): boolean {
     return process.env.NODE_ENV !== "production"
   }
 
-  return authHeader === `Bearer ${cronSecret}`
+  // Check Authorization header
+  if (authHeader === `Bearer ${cronSecret}`) {
+    return true
+  }
+
+  // Check URL query parameter
+  if (secretParam === cronSecret) {
+    return true
+  }
+
+  return false
 }
 
 export async function GET(request: Request) {

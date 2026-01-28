@@ -5,6 +5,8 @@ import { publishScheduledPosts } from "@/lib/social-publisher"
 // Verify cron secret for security
 function verifyCronSecret(request: NextRequest): boolean {
   const authHeader = request.headers.get("authorization")
+  const url = new URL(request.url)
+  const secretParam = url.searchParams.get("secret")
   const cronSecret = process.env.CRON_SECRET
 
   if (!cronSecret) {
@@ -12,7 +14,17 @@ function verifyCronSecret(request: NextRequest): boolean {
     return process.env.NODE_ENV === "development"
   }
 
-  return authHeader === `Bearer ${cronSecret}`
+  // Check Authorization header
+  if (authHeader === `Bearer ${cronSecret}`) {
+    return true
+  }
+
+  // Check URL query parameter
+  if (secretParam === cronSecret) {
+    return true
+  }
+
+  return false
 }
 
 /**
