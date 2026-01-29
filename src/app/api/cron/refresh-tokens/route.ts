@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { refreshExpiringTokens } from "@/lib/token-refresh"
-import { verifyCronAuth } from "@/lib/auth-helpers"
+import { verifyCronAuth } from "@/lib/cron-auth"
 
 /**
  * Token Refresh Cron Job

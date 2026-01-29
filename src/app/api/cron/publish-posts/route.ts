@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { publishScheduledPosts } from "@/lib/social-publisher"
-import { verifyCronAuth } from "@/lib/auth-helpers"
+import { verifyCronAuth } from "@/lib/cron-auth"
 
 /**
  * Post Publishing Cron Job
@@ -14,9 +14,6 @@ export async function GET(request: NextRequest) {
   const secretParam = url.searchParams.get("secret")
 
   if (!verifyCronAuth(authHeader, secretParam)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

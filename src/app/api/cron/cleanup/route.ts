@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { runAllCleanupJobs } from "@/lib/cleanup"
-import { verifyCronAuth } from "@/lib/auth-helpers"
+import { verifyCronAuth } from "@/lib/cron-auth"
 
 /**
  * Database Cleanup Cron Job

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { processAllFeeds, getProcessingStats, cleanupOldFeeds } from "@/lib/feed-processor"
-import { verifyCronAuth } from "@/lib/auth-helpers"
+import { verifyCronAuth } from "@/lib/cron-auth"
 
 export async function GET(request: Request) {
   // Verify authorization
