@@ -163,18 +163,190 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Setup all cron jobs on cron-job.org
- * Distributes tasks across the day to stay under 100 triggers/day limit
- *
- * Schedule:
- * - Feed processing: Every 2 hours (12/day)
- * - Publish posts: Every hour (24/day)
- * - Process queue: Every 2 hours (12/day)
- * - Refresh tokens: Once daily (1/day)
- * - Cleanup: Once daily (1/day)
- * Total: 50 triggers/day (under 100 limit)
+ * Cron setup strategies
  */
-export async function setupAllCronJobs(): Promise<{
+export type CronStrategy = 'balanced' | 'light' | 'full'
+
+export interface CronStrategyConfig {
+  name: string
+  description: string
+  totalRuns: number
+  jobs: {
+    processQueue?: { enabled: boolean; schedule: CronJobSchedule }
+    publishPosts?: { enabled: boolean; schedule: CronJobSchedule }
+    processFeeds?: { enabled: boolean; schedule: CronJobSchedule }
+    refreshTokens?: { enabled: boolean; schedule: CronJobSchedule }
+    cleanup?: { enabled: boolean; schedule: CronJobSchedule }
+  }
+}
+
+/**
+ * Get cron strategy configuration
+ */
+export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
+  switch (strategy) {
+    case 'balanced':
+      return {
+        name: 'Balanced',
+        description: 'Optimized balance between queue processing and post publishing',
+        totalRuns: 96,
+        jobs: {
+          processQueue: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [-1],
+              minutes: [0, 20, 40], // Every 20 minutes
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
+          publishPosts: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [-1], // Every hour
+              minutes: [0], // At :00
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
+          processFeeds: {
+            enabled: false,
+            schedule: {} // Manual only
+          },
+          refreshTokens: {
+            enabled: false,
+            schedule: {} // Manual only
+          },
+          cleanup: {
+            enabled: false,
+            schedule: {} // Manual only
+          }
+        }
+      }
+
+    case 'light':
+      return {
+        name: 'Light',
+        description: 'Minimal automation - only critical jobs (manual workflow)',
+        totalRuns: 48,
+        jobs: {
+          processQueue: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [-1],
+              minutes: [0, 30], // Every 30 minutes
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
+          publishPosts: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [-1],
+              minutes: [15], // Every hour at :15
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
+          processFeeds: {
+            enabled: false,
+            schedule: {}
+          },
+          refreshTokens: {
+            enabled: false,
+            schedule: {}
+          },
+          cleanup: {
+            enabled: false,
+            schedule: {}
+          }
+        }
+      }
+
+    case 'full':
+      return {
+        name: 'Full Automation',
+        description: 'Complete automation with all background tasks',
+        totalRuns: 50,
+        jobs: {
+          processQueue: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23],
+              minutes: [0],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
+          publishPosts: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [-1],
+              minutes: [15],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
+          processFeeds: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22],
+              minutes: [0],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
+          refreshTokens: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [0],
+              minutes: [30],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
+          cleanup: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [3],
+              minutes: [0],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          }
+        }
+      }
+
+    default:
+      throw new Error(`Unknown strategy: ${strategy}`)
+  }
+}
+
+/**
+ * Setup all cron jobs on cron-job.org
+ * Supports multiple strategies for different use cases
+ *
+ * @param strategy - 'balanced' (96/day), 'light' (48/day), or 'full' (50/day)
+ */
+export async function setupAllCronJobs(strategy: CronStrategy = 'balanced'): Promise<{
   feedProcessing?: number
   publishPosts?: number
   processQueue?: number
@@ -182,6 +354,7 @@ export async function setupAllCronJobs(): Promise<{
   cleanup?: number
 }> {
   const service = new CronJobOrgService()
+  const config = getCronStrategy(strategy)
 
   let appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
   if (!appUrl) {
@@ -195,6 +368,10 @@ export async function setupAllCronJobs(): Promise<{
   if (!cronSecret) {
     throw new Error("CRON_SECRET must be set for authentication")
   }
+
+  console.log(`\nUsing strategy: ${config.name}`)
+  console.log(`Description: ${config.description}`)
+  console.log(`Total runs/day: ${config.totalRuns}\n`)
 
   const jobIds: any = {}
 
@@ -240,105 +417,90 @@ export async function setupAllCronJobs(): Promise<{
     return createResult.jobId
   }
 
-  // 1. Feed Processing - Every 2 hours (12 times/day)
-  console.log("\n📥 Setting up Feed Processing cron...")
-  const feedProcessingConfig: CronJobConfig = {
-    title: "Sparrow - Feed Processing",
-    url: `https://${appUrl}/api/cron/process-feeds?secret=${encodeURIComponent(cronSecret)}`,
-    enabled: true,
-    saveResponses: true,
-    requestMethod: 1, // GET
-    requestTimeout: 60,
-    schedule: {
-      timezone: "UTC",
-      hours: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22], // Every 2 hours
-      minutes: [0],
-      mdays: [-1],
-      months: [-1],
-      wdays: [-1]
+  // 1. Process Queue
+  if (config.jobs.processQueue?.enabled) {
+    console.log("\n⚙️  Setting up Process Queue cron...")
+    const queueConfig: CronJobConfig = {
+      title: "Sparrow - Process Queue",
+      url: `https://${appUrl}/api/cron/process-queue?secret=${encodeURIComponent(cronSecret)}`,
+      enabled: true,
+      saveResponses: true,
+      requestMethod: 1,
+      requestTimeout: 60,
+      schedule: config.jobs.processQueue.schedule
     }
+    jobIds.processQueue = await createOrUpdateJob(queueConfig, 'processQueue')
+  } else {
+    console.log("\n⚙️  Process Queue: Disabled (manual only)")
   }
-  jobIds.feedProcessing = await createOrUpdateJob(feedProcessingConfig, 'feedProcessing')
 
-  // 2. Publish Posts - Every hour (24 times/day)
-  console.log("\n📤 Setting up Publish Posts cron...")
-  const publishConfig: CronJobConfig = {
-    title: "Sparrow - Publish Posts",
-    url: `https://${appUrl}/api/cron/publish-posts?secret=${encodeURIComponent(cronSecret)}`,
-    enabled: true,
-    saveResponses: true,
-    requestMethod: 1,
-    requestTimeout: 60,
-    schedule: {
-      timezone: "UTC",
-      hours: [-1], // Every hour
-      minutes: [15], // At :15 past the hour
-      mdays: [-1],
-      months: [-1],
-      wdays: [-1]
+  // 2. Publish Posts
+  if (config.jobs.publishPosts?.enabled) {
+    console.log("\n📤 Setting up Publish Posts cron...")
+    const publishConfig: CronJobConfig = {
+      title: "Sparrow - Publish Posts",
+      url: `https://${appUrl}/api/cron/publish-posts?secret=${encodeURIComponent(cronSecret)}`,
+      enabled: true,
+      saveResponses: true,
+      requestMethod: 1,
+      requestTimeout: 60,
+      schedule: config.jobs.publishPosts.schedule
     }
+    jobIds.publishPosts = await createOrUpdateJob(publishConfig, 'publishPosts')
+  } else {
+    console.log("\n📤 Publish Posts: Disabled (manual only)")
   }
-  jobIds.publishPosts = await createOrUpdateJob(publishConfig, 'publishPosts')
 
-  // 3. Process Queue - Every 2 hours (12 times/day)
-  console.log("\n⚙️  Setting up Process Queue cron...")
-  const queueConfig: CronJobConfig = {
-    title: "Sparrow - Process Queue",
-    url: `https://${appUrl}/api/cron/process-queue?secret=${encodeURIComponent(cronSecret)}`,
-    enabled: true,
-    saveResponses: true,
-    requestMethod: 1,
-    requestTimeout: 60,
-    schedule: {
-      timezone: "UTC",
-      hours: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23], // Every 2 hours (offset by 1 hour)
-      minutes: [0],
-      mdays: [-1],
-      months: [-1],
-      wdays: [-1]
+  // 3. Feed Processing
+  if (config.jobs.processFeeds?.enabled) {
+    console.log("\n📥 Setting up Feed Processing cron...")
+    const feedProcessingConfig: CronJobConfig = {
+      title: "Sparrow - Feed Processing",
+      url: `https://${appUrl}/api/cron/process-feeds?secret=${encodeURIComponent(cronSecret)}`,
+      enabled: true,
+      saveResponses: true,
+      requestMethod: 1,
+      requestTimeout: 60,
+      schedule: config.jobs.processFeeds.schedule
     }
+    jobIds.feedProcessing = await createOrUpdateJob(feedProcessingConfig, 'feedProcessing')
+  } else {
+    console.log("\n📥 Feed Processing: Disabled (manual only)")
   }
-  jobIds.processQueue = await createOrUpdateJob(queueConfig, 'processQueue')
 
-  // 4. Refresh Tokens - Once daily (1 time/day)
-  console.log("\n🔄 Setting up Refresh Tokens cron...")
-  const refreshConfig: CronJobConfig = {
-    title: "Sparrow - Refresh Tokens",
-    url: `https://${appUrl}/api/cron/refresh-tokens?secret=${encodeURIComponent(cronSecret)}`,
-    enabled: true,
-    saveResponses: true,
-    requestMethod: 1,
-    requestTimeout: 30,
-    schedule: {
-      timezone: "UTC",
-      hours: [0], // Midnight UTC
-      minutes: [30],
-      mdays: [-1],
-      months: [-1],
-      wdays: [-1]
+  // 4. Refresh Tokens
+  if (config.jobs.refreshTokens?.enabled) {
+    console.log("\n🔄 Setting up Refresh Tokens cron...")
+    const refreshConfig: CronJobConfig = {
+      title: "Sparrow - Refresh Tokens",
+      url: `https://${appUrl}/api/cron/refresh-tokens?secret=${encodeURIComponent(cronSecret)}`,
+      enabled: true,
+      saveResponses: true,
+      requestMethod: 1,
+      requestTimeout: 30,
+      schedule: config.jobs.refreshTokens.schedule
     }
+    jobIds.refreshTokens = await createOrUpdateJob(refreshConfig, 'refreshTokens')
+  } else {
+    console.log("\n🔄 Refresh Tokens: Disabled (manual only)")
   }
-  jobIds.refreshTokens = await createOrUpdateJob(refreshConfig, 'refreshTokens')
 
-  // 5. Cleanup - Once daily (1 time/day)
-  console.log("\n🗑️  Setting up Cleanup cron...")
-  const cleanupConfig: CronJobConfig = {
-    title: "Sparrow - Cleanup",
-    url: `https://${appUrl}/api/cron/cleanup?secret=${encodeURIComponent(cronSecret)}`,
-    enabled: true,
-    saveResponses: true,
-    requestMethod: 1,
-    requestTimeout: 30,
-    schedule: {
-      timezone: "UTC",
-      hours: [3], // 3 AM UTC
-      minutes: [0],
-      mdays: [-1],
-      months: [-1],
-      wdays: [-1]
+  // 5. Cleanup
+  if (config.jobs.cleanup?.enabled) {
+    console.log("\n🗑️  Setting up Cleanup cron...")
+    const cleanupConfig: CronJobConfig = {
+      title: "Sparrow - Cleanup",
+      url: `https://${appUrl}/api/cron/cleanup?secret=${encodeURIComponent(cronSecret)}`,
+      enabled: true,
+      saveResponses: true,
+      requestMethod: 1,
+      requestTimeout: 30,
+      schedule: config.jobs.cleanup.schedule
     }
+    jobIds.cleanup = await createOrUpdateJob(cleanupConfig, 'cleanup')
+  } else {
+    console.log("\n🗑️  Cleanup: Disabled (manual only)")
   }
-  jobIds.cleanup = await createOrUpdateJob(cleanupConfig, 'cleanup')
 
   return jobIds
 }

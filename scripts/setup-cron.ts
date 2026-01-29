@@ -7,16 +7,37 @@
  * Each job runs on its own schedule optimized for the 100 triggers/day limit
  *
  * Usage:
- *   npm run setup-cron
- *   or
- *   tsx scripts/setup-cron.ts
+ *   npm run setup-cron                    (uses balanced strategy)
+ *   npm run setup-cron balanced           (96 runs/day - recommended)
+ *   npm run setup-cron light              (48 runs/day - minimal automation)
+ *   npm run setup-cron full               (50 runs/day - complete automation)
+ *
+ * Strategies:
+ *   balanced - Queue every 20min (72), Posts every 1hr (24) = 96/day
+ *   light    - Queue every 30min (48), Posts every 1hr (24) = 48/day
+ *   full     - All 5 jobs automated = 50/day
  */
 
-import { setupAllCronJobs } from "../src/lib/cron-job-org"
+import { setupAllCronJobs, getCronStrategy, type CronStrategy } from "../src/lib/cron-job-org"
 import dotenv from "dotenv"
 
 // Load environment variables
 dotenv.config({ path: ".env.local" })
+
+// Get strategy from command line argument
+const args = process.argv.slice(2)
+let strategy: CronStrategy = 'balanced' // Default
+
+if (args.length > 0) {
+  const inputStrategy = args[0].toLowerCase()
+  if (['balanced', 'light', 'full'].includes(inputStrategy)) {
+    strategy = inputStrategy as CronStrategy
+  } else {
+    console.error(`\n❌ Invalid strategy: ${args[0]}`)
+    console.error(`   Valid options: balanced, light, full\n`)
+    process.exit(1)
+  }
+}
 
 async function main() {
   console.log("=".repeat(60))
@@ -43,28 +64,68 @@ async function main() {
   console.log("Environment variables validated ✓")
   console.log()
   console.log("Configuration:")
+  console.log(`  Strategy: ${strategy}`)
   console.log(`  API URL: ${process.env.NEXT_PUBLIC_APP_URL}`)
   console.log(`  Cron Secret: ${process.env.CRON_SECRET?.substring(0, 10)}...`)
   console.log()
-  console.log("Creating 5 separate cron jobs with optimized schedules...")
+
+  // Get strategy details
+  const strategyConfig = getCronStrategy(strategy)
+
+  console.log(`Setting up cron jobs using '${strategyConfig.name}' strategy`)
+  console.log(`${strategyConfig.description}`)
+  console.log(`Total runs per day: ${strategyConfig.totalRuns}`)
 
   try {
-    const jobIds = await setupAllCronJobs()
+    const jobIds = await setupAllCronJobs(strategy)
 
     console.log()
     console.log("=".repeat(60))
     console.log("✓ Setup completed successfully!")
     console.log("=".repeat(60))
     console.log()
-    console.log("Created Jobs:")
-    console.log(`  📥 Feed Processing: ID ${jobIds.feedProcessing || 'N/A'} (every 2 hours = 12/day)`)
-    console.log(`  📤 Publish Posts: ID ${jobIds.publishPosts || 'N/A'} (every hour = 24/day)`)
-    console.log(`  ⚙️  Process Queue: ID ${jobIds.processQueue || 'N/A'} (every 2 hours = 12/day)`)
-    console.log(`  🔄 Refresh Tokens: ID ${jobIds.refreshTokens || 'N/A'} (daily = 1/day)`)
-    console.log(`  🗑️  Cleanup: ID ${jobIds.cleanup || 'N/A'} (daily = 1/day)`)
+    console.log("Created/Updated Jobs:")
+
+    if (jobIds.processQueue) {
+      console.log(`  ⚙️  Process Queue: ID ${jobIds.processQueue}`)
+    }
+    if (jobIds.publishPosts) {
+      console.log(`  📤 Publish Posts: ID ${jobIds.publishPosts}`)
+    }
+    if (jobIds.feedProcessing) {
+      console.log(`  📥 Feed Processing: ID ${jobIds.feedProcessing}`)
+    }
+    if (jobIds.refreshTokens) {
+      console.log(`  🔄 Refresh Tokens: ID ${jobIds.refreshTokens}`)
+    }
+    if (jobIds.cleanup) {
+      console.log(`  🗑️  Cleanup: ID ${jobIds.cleanup}`)
+    }
+
     console.log()
-    console.log("Total triggers per day: 50 (under 100 limit) ✓")
+    console.log(`Total triggers per day: ${strategyConfig.totalRuns} (under 100 limit) ✓`)
     console.log()
+
+    // Show which jobs are manual
+    const manualJobs = []
+    if (!strategyConfig.jobs.processFeeds?.enabled) manualJobs.push('process-feeds')
+    if (!strategyConfig.jobs.refreshTokens?.enabled) manualJobs.push('refresh-tokens')
+    if (!strategyConfig.jobs.cleanup?.enabled) manualJobs.push('cleanup')
+
+    if (manualJobs.length > 0) {
+      console.log("Manual Jobs (run when needed):")
+      if (manualJobs.includes('process-feeds')) {
+        console.log(`  📥 Feed Processing: ${process.env.NEXT_PUBLIC_APP_URL}/api/cron/process-feeds?secret=...`)
+      }
+      if (manualJobs.includes('refresh-tokens')) {
+        console.log(`  🔄 Refresh Tokens: ${process.env.NEXT_PUBLIC_APP_URL}/api/cron/refresh-tokens?secret=...`)
+      }
+      if (manualJobs.includes('cleanup')) {
+        console.log(`  🗑️  Cleanup: ${process.env.NEXT_PUBLIC_APP_URL}/api/cron/cleanup?secret=...`)
+      }
+      console.log()
+    }
+
     console.log("Next steps:")
     console.log("  1. Visit https://console.cron-job.org to view your jobs")
     console.log("  2. Verify all jobs are enabled and scheduled correctly")
