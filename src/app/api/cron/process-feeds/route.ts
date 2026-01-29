@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { processAllFeeds, getProcessingStats, cleanupOldFeeds } from "@/lib/feed-processor"
+import { processAllFeeds, getProcessingStatsUncached, cleanupOldFeeds } from "@/lib/feed-processor"
 import { verifyCronAuth } from "@/lib/cron-auth"
 
 export async function GET(request: Request) {
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const totalSkipped = results.reduce((sum, r) => sum + r.skipped, 0)
 
     // Get updated stats
-    const stats = await getProcessingStats()
+    const stats = await getProcessingStatsUncached()
 
     const duration = Date.now() - startTime
 

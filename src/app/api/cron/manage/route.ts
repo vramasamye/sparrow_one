@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { CronJobOrgService } from "@/lib/cron-job-org"
-
-function verifyCronSecret(request: NextRequest): boolean {
-  const authHeader = request.headers.get("authorization")
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return process.env.NODE_ENV === "development"
-  return authHeader === `Bearer ${cronSecret}`
-}
+import { verifyCronAuth } from "@/lib/cron-auth"
 
 /**
  * Manage cron-job.org jobs
@@ -16,7 +10,7 @@ function verifyCronSecret(request: NextRequest): boolean {
  * DELETE /api/cron/manage?jobId=123 - Delete a job
  */
 export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!verifyCronAuth(request.headers.get("authorization"), null)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -37,7 +31,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!verifyCronAuth(request.headers.get("authorization"), null)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

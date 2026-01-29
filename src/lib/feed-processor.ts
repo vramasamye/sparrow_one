@@ -276,9 +276,9 @@ async function addFeedItem(
 }
 
 /**
- * Get processing statistics
+ * Get processing statistics (non-cached version for API routes)
  */
-export const getProcessingStats = cache(async () => {
+export async function getProcessingStatsUncached() {
   const [pendingCount, approvedCount, rejectedCount, publishedCount, feedCount] =
     await Promise.all([
       prisma.feed.count({ where: { status: "PENDING" } }),
@@ -295,4 +295,9 @@ export const getProcessingStats = cache(async () => {
     published: publishedCount,
     activeFeeds: feedCount,
   }
-})
+}
+
+/**
+ * Get processing statistics (cached version for Server Components)
+ */
+export const getProcessingStats = cache(getProcessingStatsUncached)

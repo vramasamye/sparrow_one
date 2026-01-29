@@ -6,18 +6,7 @@ import { runAllCleanupJobs } from "@/lib/cleanup"
 import { dequeueNextJob, markJobCompleted, markJobFailed } from "@/lib/queue"
 import { generatePostsForFeed } from "@/lib/auto-generator"
 import { distributeToSubscribers } from "@/lib/auto-scheduler"
-
-function verifyCronSecret(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return process.env.NODE_ENV === "development"
-
-  // Support both Authorization header and query parameter
-  const authHeader = request.headers.get("authorization")
-  const { searchParams } = new URL(request.url)
-  const querySecret = searchParams.get("secret")
-
-  return authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret
-}
+import { verifyCronAuth } from "@/lib/cron-auth"
 
 /**
  * Master Cron Job (triggered by cron-job.org)
@@ -25,7 +14,11 @@ function verifyCronSecret(request: NextRequest): boolean {
  * Authentication via Bearer token or query parameter
  */
 export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  const authHeader = request.headers.get("authorization")
+  const { searchParams } = new URL(request.url)
+  const secretParam = searchParams.get("secret")
+
+  if (!verifyCronAuth(authHeader, secretParam)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
