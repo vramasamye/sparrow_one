@@ -13,11 +13,11 @@ export default function AdminFeedsPage() {
         </p>
       </div>
 
-      <Suspense fallback={<div>Loading stats...</div>}>
+      <Suspense fallback={<div>Loading stats…</div>}>
         <FeedStats />
       </Suspense>
 
-      <Suspense fallback={<div>Loading feeds...</div>}>
+      <Suspense fallback={<div>Loading feeds…</div>}>
         <FeedList />
       </Suspense>
     </div>

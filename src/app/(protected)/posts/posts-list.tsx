@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { format } from "date-fns"
-import { ExternalLink, Linkedin, Loader2, MoreVertical, Trash, Twitter } from "lucide-react"
+import { ExternalLink, Linkedin, MoreVertical, Trash, Twitter } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { toast } from "sonner"
+import { usePosts, useCancelPost } from "@/hooks/use-queries"
 
 interface ScheduledPost {
   id: string
@@ -40,48 +40,14 @@ const statusColors: Record<string, string> = {
 }
 
 export function PostsList() {
-  const [posts, setPosts] = useState<ScheduledPost[]>([])
-  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>("all")
 
-  useEffect(() => {
-    fetchPosts()
-  }, [filter])
+  // React Query hooks
+  const { data: posts = [], isLoading: loading } = usePosts(filter)
+  const cancelPostMutation = useCancelPost()
 
-  async function fetchPosts() {
-    try {
-      const params = new URLSearchParams()
-      if (filter !== "all") {
-        params.set("status", filter)
-      }
-
-      const response = await fetch(`/api/posts?${params.toString()}`)
-      if (!response.ok) throw new Error("Failed to fetch posts")
-
-      const data = await response.json()
-      setPosts(data.posts)
-    } catch {
-      toast.error("Failed to load posts")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleCancel(postId: string) {
-    try {
-      const response = await fetch(`/api/posts/${postId}`, {
-        method: "DELETE",
-      })
-
-      if (!response.ok) throw new Error("Failed to cancel post")
-
-      setPosts((prev) =>
-        prev.map((p) => (p.id === postId ? { ...p, status: "CANCELLED" as const } : p))
-      )
-      toast.success("Post cancelled")
-    } catch {
-      toast.error("Failed to cancel post")
-    }
+  const handleCancel = async (postId: string) => {
+    await cancelPostMutation.mutateAsync(postId)
   }
 
   if (loading) {
@@ -138,7 +104,7 @@ export function PostsList() {
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" aria-label="Post options">
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>

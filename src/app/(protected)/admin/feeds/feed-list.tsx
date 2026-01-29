@@ -3,8 +3,9 @@
 import { format } from "date-fns"
 import { CheckCircle, ExternalLink, XCircle, CheckSquare, Square } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useState, useTransition, useEffect } from "react"
-import { toast } from "sonner"
+import { useState, useTransition, useEffect, useCallback } from "react"
+
+import { useAdminFeeds, useApproveFeed, useBulkApproveFeed } from "@/hooks/use-queries"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,110 +28,72 @@ export function FeedList() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
-  const [feeds, setFeeds] = useState<Feed[]>([])
-  const [loading, setLoading] = useState(true)
   const [rejectionReason, setRejectionReason] = useState<Record<string, string>>({})
   const [selectedFeeds, setSelectedFeeds] = useState<string[]>([])
 
   const status = searchParams.get("status") || "PENDING"
 
-  // Fetch feeds on mount and when status changes
+  // React Query hooks
+  const { data: feeds = [], isLoading: loading } = useAdminFeeds(status)
+  const approveFeedMutation = useApproveFeed()
+  const bulkApproveMutation = useBulkApproveFeed()
+
+  // Clear selection when status changes
   useEffect(() => {
-    fetchFeeds()
-    setSelectedFeeds([]) // Clear selection on status change
+    setSelectedFeeds([])
   }, [status])
 
-  async function fetchFeeds() {
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/admin/feeds?status=${status}`)
-      const data = await res.json()
-      setFeeds(data.feeds || [])
-    } catch (error) {
-      console.error("Failed to fetch feeds:", error)
-      toast.error("Failed to load feeds")
-    } finally {
-      setLoading(false)
-    }
-  }
-
   // Toggle selection for a single feed
-  const toggleSelect = (feedId: string) => {
+  const toggleSelect = useCallback((feedId: string) => {
     setSelectedFeeds((prev) =>
       prev.includes(feedId)
         ? prev.filter((id) => id !== feedId)
         : [...prev, feedId]
     )
-  }
+  }, [])
 
   // Toggle select all
-  const toggleSelectAll = () => {
+  const toggleSelectAll = useCallback(() => {
     if (selectedFeeds.length === feeds.length) {
       setSelectedFeeds([])
     } else {
       setSelectedFeeds(feeds.map((f) => f.id))
     }
-  }
+  }, [selectedFeeds.length, feeds])
 
-  async function handleAction(feedId: string, action: "approve" | "reject") {
-    startTransition(async () => {
-      try {
-        const res = await fetch(`/api/admin/feeds/${feedId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+  const handleAction = useCallback(
+    async (feedId: string, action: "approve" | "reject") => {
+      startTransition(async () => {
+        try {
+          await approveFeedMutation.mutateAsync({
+            feedId,
             action,
             rejectionReason: action === "reject" ? rejectionReason[feedId] : undefined,
-          }),
-        })
-
-        if (res.ok) {
-          toast.success(`Feed ${action}d successfully`)
-          setFeeds((prev) => prev.filter((f) => f.id !== feedId))
+          })
           setSelectedFeeds((prev) => prev.filter((id) => id !== feedId))
-        } else {
-          toast.error("Failed to update feed")
+        } catch (error) {
+          // Error handling is done in the mutation
         }
-      } catch (error) {
-        console.error("Failed to update feed:", error)
-        toast.error("An error occurred")
-      }
-    })
-  }
+      })
+    },
+    [rejectionReason, approveFeedMutation]
+  )
 
-  async function handleBulkAction(action: "approve" | "reject") {
-    if (selectedFeeds.length === 0) return
+  const handleBulkAction = useCallback(
+    async (action: "approve" | "reject") => {
+      if (selectedFeeds.length === 0) return
 
-    startTransition(async () => {
-      try {
-        const res = await fetch("/api/admin/feeds", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            feedIds: selectedFeeds,
-            action,
-          }),
-        })
-
-        if (res.ok) {
-          const data = await res.json()
-          toast.success(`${data.count} feeds ${action}d successfully`)
-          
-          // Remove processed feeds from list and clear selection
-          setFeeds((prev) => prev.filter((f) => !selectedFeeds.includes(f.id)))
+      startTransition(async () => {
+        try {
+          await bulkApproveMutation.mutateAsync({ feedIds: selectedFeeds, action })
           setSelectedFeeds([])
-          
-          // Optional: Refresh list from server to be sure
-          // fetchFeeds() 
-        } else {
-          toast.error(`Failed to ${action} selected feeds`)
+        } catch (error) {
+          // Error handling is done in the mutation
         }
-      } catch (error) {
-        console.error("Bulk action failed:", error)
-        toast.error("An error occurred during bulk action")
-      }
-    })
-  }
+      })
+    },
+    [selectedFeeds, bulkApproveMutation]
+  )
 
   const statusTabs = [
     { value: "PENDING", label: "Pending" },
@@ -187,6 +150,7 @@ export function FeedList() {
                 checked={selectedFeeds.length === feeds.length && feeds.length > 0}
                 onChange={toggleSelectAll}
                 id="select-all"
+                aria-label="Select all feeds"
               />
               <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
                 Select All ({feeds.length})
@@ -246,6 +210,7 @@ export function FeedList() {
                       className="h-4 w-4 rounded border-gray-300 accent-primary"
                       checked={selectedFeeds.includes(feed.id)}
                       onChange={() => toggleSelect(feed.id)}
+                      aria-label={`Select ${feed.title}`}
                     />
                   </div>
                 )}
@@ -258,6 +223,7 @@ export function FeedList() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-muted-foreground hover:text-foreground"
+                      aria-label={`Open ${feed.title} in new tab`}
                     >
                       <ExternalLink className="h-4 w-4" />
                     </a>
@@ -292,7 +258,7 @@ export function FeedList() {
                     Approve
                   </Button>
                   <Input
-                    placeholder="Rejection reason (optional)"
+                    placeholder="Rejection reason (optional)…"
                     className="max-w-xs"
                     value={rejectionReason[feed.id] || ""}
                     onChange={(e) =>
@@ -301,6 +267,9 @@ export function FeedList() {
                         [feed.id]: e.target.value,
                       }))
                     }
+                    name={`rejection-reason-${feed.id}`}
+                    autoComplete="off"
+                    aria-label="Rejection reason"
                   />
                   <Button
                     size="sm"

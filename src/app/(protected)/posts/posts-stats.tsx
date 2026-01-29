@@ -1,10 +1,11 @@
 import { Calendar, CheckCircle, Clock, XCircle } from "lucide-react"
+import { cache } from "react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-async function getPostsStats(userId: string) {
+const getPostsStats = cache(async (userId: string) => {
   const [scheduled, published, failed, today] = await Promise.all([
     prisma.scheduledPost.count({
       where: { userId, status: "SCHEDULED" },
@@ -27,7 +28,7 @@ async function getPostsStats(userId: string) {
   ])
 
   return { scheduled, published, failed, today }
-}
+})
 
 export async function PostsStats() {
   const session = await auth()

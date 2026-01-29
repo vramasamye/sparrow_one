@@ -1,31 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { runAllCleanupJobs } from "@/lib/cleanup"
-
-// Verify cron secret for security
-function verifyCronSecret(request: NextRequest): boolean {
-  const authHeader = request.headers.get("authorization")
-  const url = new URL(request.url)
-  const secretParam = url.searchParams.get("secret")
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret) {
-    console.warn("CRON_SECRET not set, allowing request in development")
-    return process.env.NODE_ENV === "development"
-  }
-
-  // Check Authorization header
-  if (authHeader === `Bearer ${cronSecret}`) {
-    return true
-  }
-
-  // Check URL query parameter
-  if (secretParam === cronSecret) {
-    return true
-  }
-
-  return false
-}
+import { verifyCronAuth } from "@/lib/auth-helpers"
 
 /**
  * Database Cleanup Cron Job
@@ -37,7 +13,11 @@ function verifyCronSecret(request: NextRequest): boolean {
  * - Post history older than 90 days
  */
 export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  const authHeader = request.headers.get("authorization")
+  const url = new URL(request.url)
+  const secretParam = url.searchParams.get("secret")
+
+  if (!verifyCronAuth(authHeader, secretParam)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

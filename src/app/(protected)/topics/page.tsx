@@ -1,75 +1,28 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useState } from "react"
 import { Check, Loader2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { toast } from "sonner"
-
-interface Topic {
-  id: string
-  name: string
-  slug: string
-  description: string | null
-  icon: string | null
-  _count: {
-    rssFeeds: number
-  }
-  isFollowing: boolean
-}
+import { useTopics, useToggleTopic } from "@/hooks/use-queries"
 
 export default function TopicsPage() {
-  const [topics, setTopics] = useState<Topic[]>([])
-  const [loading, setLoading] = useState(true)
-  const [pending, startTransition] = useTransition()
+  const { data: topics = [], isLoading } = useTopics()
+  const toggleTopicMutation = useToggleTopic()
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchTopics()
-  }, [])
-
-  async function fetchTopics() {
-    try {
-      const response = await fetch("/api/topics")
-      if (!response.ok) throw new Error("Failed to fetch topics")
-      const data = await response.json()
-      setTopics(data)
-    } catch {
-      toast.error("Failed to load topics")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function toggleTopic(topicId: string, isFollowing: boolean) {
+  const handleToggle = async (topicId: string, isFollowing: boolean) => {
     setTogglingId(topicId)
-    startTransition(async () => {
-      try {
-        const response = await fetch(`/api/topics/${topicId}/follow`, {
-          method: isFollowing ? "DELETE" : "POST",
-        })
-
-        if (!response.ok) throw new Error("Failed to update topic")
-
-        setTopics((prev) =>
-          prev.map((t) => (t.id === topicId ? { ...t, isFollowing: !isFollowing } : t))
-        )
-
-        toast.success(isFollowing ? "Unfollowed topic" : "Following topic")
-      } catch {
-        toast.error("Failed to update topic")
-      } finally {
-        setTogglingId(null)
-      }
-    })
+    await toggleTopicMutation.mutateAsync({ topicId, isFollowing })
+    setTogglingId(null)
   }
 
   const followingCount = topics.filter((t) => t.isFollowing).length
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-8">
         <div>
@@ -104,7 +57,7 @@ export default function TopicsPage() {
             className={`cursor-pointer transition-all hover:shadow-md ${
               topic.isFollowing ? "border-primary bg-primary/5" : ""
             }`}
-            onClick={() => toggleTopic(topic.id, topic.isFollowing)}
+            onClick={() => handleToggle(topic.id, topic.isFollowing)}
           >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
@@ -125,13 +78,13 @@ export default function TopicsPage() {
                 <Button
                   variant={topic.isFollowing ? "secondary" : "default"}
                   size="sm"
-                  disabled={pending && togglingId === topic.id}
+                  disabled={toggleTopicMutation.isPending && togglingId === topic.id}
                   onClick={(e) => {
                     e.stopPropagation()
-                    toggleTopic(topic.id, topic.isFollowing)
+                    handleToggle(topic.id, topic.isFollowing)
                   }}
                 >
-                  {pending && togglingId === topic.id ? (
+                  {toggleTopicMutation.isPending && togglingId === topic.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : topic.isFollowing ? (
                     "Unfollow"

@@ -1,4 +1,5 @@
 import { AlertCircle, Linkedin, Shield, Twitter, User } from "lucide-react"
+import { cache } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -14,7 +15,7 @@ import { ConnectButton, DisconnectButton } from "./connect-buttons"
 const twitterConfigured = !!(process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET)
 const linkedinConfigured = !!(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET)
 
-async function getSocialAccounts(userId: string) {
+const getSocialAccounts = cache(async (userId: string) => {
   return prisma.socialAccount.findMany({
     where: { userId },
     select: {
@@ -26,15 +27,15 @@ async function getSocialAccounts(userId: string) {
       lastTokenRefresh: true,
     },
   })
-}
+})
 
-async function getUserRole(userId: string) {
+const getUserRole = cache(async (userId: string) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { role: true },
   })
   return user?.role
-}
+})
 
 export default async function SettingsPage() {
   const session = await auth()

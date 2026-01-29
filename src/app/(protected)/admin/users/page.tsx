@@ -1,5 +1,6 @@
 import { format } from "date-fns"
 import { MoreVertical, Shield, User } from "lucide-react"
+import { cache } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { prisma } from "@/lib/prisma"
 
-async function getUsers() {
+const getUsers = cache(async () => {
   return prisma.user.findMany({
     include: {
       _count: {
@@ -32,9 +33,9 @@ async function getUsers() {
     },
     orderBy: { createdAt: "desc" },
   })
-}
+})
 
-async function getUserStats() {
+const getUserStats = cache(async () => {
   const [totalUsers, activeUsers, admins] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({
@@ -50,7 +51,7 @@ async function getUserStats() {
   ])
 
   return { totalUsers, activeUsers, admins }
-}
+})
 
 export default async function AdminUsersPage() {
   const [users, stats] = await Promise.all([getUsers(), getUserStats()])
@@ -152,7 +153,7 @@ export default async function AdminUsersPage() {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" aria-label="User options">
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>

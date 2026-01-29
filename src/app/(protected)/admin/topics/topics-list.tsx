@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Plus, Trash2, ToggleLeft, ToggleRight, Rss, ExternalLink } from "lucide-react"
 import { toast } from "sonner"
 
@@ -16,6 +16,14 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  useAdminTopics,
+  useCreateTopic,
+  useDeleteTopic,
+  useCreateFeed,
+  useToggleFeed,
+  useDeleteFeed,
+} from "@/hooks/use-queries"
 
 interface RSSFeed {
   id: string
@@ -38,8 +46,6 @@ interface Topic {
 }
 
 export function TopicsList() {
-  const [topics, setTopics] = useState<Topic[]>([])
-  const [loading, setLoading] = useState(true)
   const [addTopicOpen, setAddTopicOpen] = useState(false)
   const [addFeedOpen, setAddFeedOpen] = useState(false)
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null)
@@ -47,142 +53,61 @@ export function TopicsList() {
   const [newTopic, setNewTopic] = useState({ name: "", description: "" })
   const [newFeed, setNewFeed] = useState({ name: "", url: "" })
 
-  useEffect(() => {
-    fetchTopics()
-  }, [])
-
-  const fetchTopics = async () => {
-    try {
-      const response = await fetch("/api/admin/topics")
-      if (!response.ok) throw new Error("Failed to fetch topics")
-      const data = await response.json()
-      setTopics(data.topics)
-    } catch (error) {
-      toast.error("Failed to load topics")
-    } finally {
-      setLoading(false)
-    }
-  }
+  // React Query hooks
+  const { data: topics = [], isLoading: loading } = useAdminTopics()
+  const createTopicMutation = useCreateTopic()
+  const deleteTopicMutation = useDeleteTopic()
+  const createFeedMutation = useCreateFeed()
+  const toggleFeedMutation = useToggleFeed()
+  const deleteFeedMutation = useDeleteFeed()
 
   const handleAddTopic = async () => {
     if (!newTopic.name.trim()) {
-      toast.error("Topic name is required")
+      toast.error("Topic name is required. Please enter a name.")
       return
     }
 
-    try {
-      const response = await fetch("/api/admin/topics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newTopic),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to create topic")
-      }
-
-      toast.success("Topic created successfully")
-      setNewTopic({ name: "", description: "" })
-      setAddTopicOpen(false)
-      fetchTopics()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create topic")
-    }
+    await createTopicMutation.mutateAsync(newTopic)
+    setNewTopic({ name: "", description: "" })
+    setAddTopicOpen(false)
   }
 
   const handleDeleteTopic = async (topicId: string) => {
     if (!confirm("Are you sure you want to delete this topic?")) return
-
-    try {
-      const response = await fetch(`/api/admin/topics/${topicId}`, {
-        method: "DELETE",
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to delete topic")
-      }
-
-      toast.success("Topic deleted successfully")
-      fetchTopics()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete topic")
-    }
+    await deleteTopicMutation.mutateAsync(topicId)
   }
 
   const handleAddFeed = async () => {
     if (!newFeed.name.trim() || !newFeed.url.trim()) {
-      toast.error("Feed name and URL are required")
+      toast.error("Feed name and URL are required. Please fill in both fields.")
       return
     }
 
     if (!selectedTopicId) {
-      toast.error("Please select a topic")
+      toast.error("Please select a topic first.")
       return
     }
 
-    try {
-      const response = await fetch("/api/admin/rss-feeds", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...newFeed,
-          topicId: selectedTopicId,
-        }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to create RSS feed")
-      }
-
-      toast.success("RSS feed added successfully")
-      setNewFeed({ name: "", url: "" })
-      setAddFeedOpen(false)
-      setSelectedTopicId(null)
-      fetchTopics()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to add RSS feed")
-    }
+    await createFeedMutation.mutateAsync({
+      ...newFeed,
+      topicId: selectedTopicId,
+    })
+    setNewFeed({ name: "", url: "" })
+    setAddFeedOpen(false)
+    setSelectedTopicId(null)
   }
 
   const handleToggleFeed = async (feedId: string, isActive: boolean) => {
-    try {
-      const response = await fetch(`/api/admin/rss-feeds/${feedId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !isActive }),
-      })
-
-      if (!response.ok) throw new Error("Failed to toggle feed")
-
-      toast.success(`Feed ${!isActive ? "activated" : "deactivated"}`)
-      fetchTopics()
-    } catch (error) {
-      toast.error("Failed to toggle feed status")
-    }
+    await toggleFeedMutation.mutateAsync({ feedId, isActive })
   }
 
   const handleDeleteFeed = async (feedId: string) => {
     if (!confirm("Are you sure you want to delete this RSS feed?")) return
-
-    try {
-      const response = await fetch(`/api/admin/rss-feeds/${feedId}`, {
-        method: "DELETE",
-      })
-
-      if (!response.ok) throw new Error("Failed to delete feed")
-
-      toast.success("RSS feed deleted successfully")
-      fetchTopics()
-    } catch (error) {
-      toast.error("Failed to delete RSS feed")
-    }
+    await deleteFeedMutation.mutateAsync(feedId)
   }
 
   if (loading) {
-    return <div>Loading...</div>
+    return <div>Loading…</div>
   }
 
   return (
@@ -213,6 +138,8 @@ export function TopicsList() {
                     setNewTopic({ ...newTopic, name: e.target.value })
                   }
                   placeholder="e.g., Artificial Intelligence"
+                  name="topic-name"
+                  autoComplete="off"
                 />
               </div>
               <div>
@@ -223,7 +150,9 @@ export function TopicsList() {
                   onChange={(e) =>
                     setNewTopic({ ...newTopic, description: e.target.value })
                   }
-                  placeholder="Brief description of this topic"
+                  placeholder="Brief description of this topic…"
+                  name="topic-description"
+                  autoComplete="off"
                 />
               </div>
             </div>
@@ -289,6 +218,8 @@ export function TopicsList() {
                               setNewFeed({ ...newFeed, name: e.target.value })
                             }
                             placeholder="e.g., OpenAI Blog"
+                            name="feed-name"
+                            autoComplete="off"
                           />
                         </div>
                         <div>
@@ -300,6 +231,9 @@ export function TopicsList() {
                               setNewFeed({ ...newFeed, url: e.target.value })
                             }
                             placeholder="https://example.com/feed.xml"
+                            name="feed-url"
+                            autoComplete="url"
+                            type="url"
                           />
                         </div>
                       </div>
@@ -322,6 +256,7 @@ export function TopicsList() {
                     size="sm"
                     onClick={() => handleDeleteTopic(topic.id)}
                     disabled={topic._count.rssFeeds > 0 || topic._count.feeds > 0}
+                    aria-label="Delete topic"
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
@@ -362,6 +297,7 @@ export function TopicsList() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleToggleFeed(feed.id, feed.isActive)}
+                          aria-label={feed.isActive ? "Deactivate feed" : "Activate feed"}
                         >
                           {feed.isActive ? (
                             <ToggleRight className="h-5 w-5 text-green-600" />
@@ -373,6 +309,7 @@ export function TopicsList() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDeleteFeed(feed.id)}
+                          aria-label="Delete feed"
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>

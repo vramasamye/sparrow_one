@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { dequeueNextJob, markJobCompleted, markJobFailed, getQueueStats, recoverStuckJobs } from "@/lib/queue"
 import { generatePostsForFeed } from "@/lib/auto-generator"
 import { distributeToSubscribers } from "@/lib/auto-scheduler"
+import { verifyCronAuth } from "@/lib/auth-helpers"
 
 /**
  * Process queue of approved feeds
@@ -18,34 +19,13 @@ import { distributeToSubscribers } from "@/lib/auto-scheduler"
  * So we process ONE job per invocation to stay within limits
  */
 
-// Verify cron secret
-function verifyCronSecret(request: Request): boolean {
+export async function GET(request: Request) {
+  // Verify authorization
   const authHeader = request.headers.get("authorization")
   const url = new URL(request.url)
   const secretParam = url.searchParams.get("secret")
-  const cronSecret = process.env.CRON_SECRET
 
-  if (!cronSecret) {
-    console.warn("CRON_SECRET not set, allowing request in development")
-    return process.env.NODE_ENV !== "production"
-  }
-
-  // Check Authorization header
-  if (authHeader === `Bearer ${cronSecret}`) {
-    return true
-  }
-
-  // Check URL query parameter
-  if (secretParam === cronSecret) {
-    return true
-  }
-
-  return false
-}
-
-export async function GET(request: Request) {
-  // Verify authorization
-  if (!verifyCronSecret(request)) {
+  if (!verifyCronAuth(authHeader, secretParam)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

@@ -1,35 +1,15 @@
 import { NextResponse } from "next/server"
 
 import { processAllFeeds, getProcessingStats, cleanupOldFeeds } from "@/lib/feed-processor"
-
-// Verify cron secret to prevent unauthorized access
-function verifyCronSecret(request: Request): boolean {
-  const authHeader = request.headers.get("authorization")
-  const url = new URL(request.url)
-  const secretParam = url.searchParams.get("secret")
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret) {
-    console.warn("CRON_SECRET not set, allowing request in development")
-    return process.env.NODE_ENV !== "production"
-  }
-
-  // Check Authorization header
-  if (authHeader === `Bearer ${cronSecret}`) {
-    return true
-  }
-
-  // Check URL query parameter
-  if (secretParam === cronSecret) {
-    return true
-  }
-
-  return false
-}
+import { verifyCronAuth } from "@/lib/auth-helpers"
 
 export async function GET(request: Request) {
   // Verify authorization
-  if (!verifyCronSecret(request)) {
+  const authHeader = request.headers.get("authorization")
+  const url = new URL(request.url)
+  const secretParam = url.searchParams.get("secret")
+
+  if (!verifyCronAuth(authHeader, secretParam)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

@@ -1,12 +1,13 @@
 import Link from "next/link"
 import { ArrowRight, Calendar, Linkedin, Play, Rss, Settings, Tags, Twitter } from "lucide-react"
+import { cache } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-async function getDashboardStats(userId: string) {
+const getDashboardStats = cache(async (userId: string) => {
   const [scheduledPosts, socialAccounts, userTopics, pendingFeeds, approvedFeeds] = await Promise.all([
     prisma.scheduledPost.count({
       where: {
@@ -38,15 +39,15 @@ async function getDashboardStats(userId: string) {
     pendingFeeds,
     approvedFeeds,
   }
-}
+})
 
-async function getUserRole(userId: string) {
+const getUserRole = cache(async (userId: string) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { role: true },
   })
   return user?.role
-}
+})
 
 export default async function DashboardPage() {
   const session = await auth()

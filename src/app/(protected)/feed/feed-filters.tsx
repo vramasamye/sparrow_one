@@ -1,41 +1,24 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useMemo } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-
-interface Topic {
-  id: string
-  name: string
-  slug: string
-}
+import { useTopics } from "@/hooks/use-queries"
 
 export function FeedFilters() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [topics, setTopics] = useState<Topic[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: allTopics = [], isLoading: loading } = useTopics()
 
   const currentTopic = searchParams.get("topic")
 
-  useEffect(() => {
-    async function fetchTopics() {
-      try {
-        const response = await fetch("/api/topics")
-        if (response.ok) {
-          const data = await response.json()
-          setTopics(data.filter((t: { isFollowing: boolean }) => t.isFollowing))
-        }
-      } catch (error) {
-        console.error("Failed to fetch topics:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchTopics()
-  }, [])
+  // Filter to only show following topics
+  const topics = useMemo(
+    () => allTopics.filter((t) => t.isFollowing),
+    [allTopics]
+  )
 
   function handleTopicChange(topicId: string | null) {
     const params = new URLSearchParams(searchParams.toString())

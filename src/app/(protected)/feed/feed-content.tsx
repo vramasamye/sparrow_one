@@ -1,7 +1,7 @@
 "use client"
 
 import { useSearchParams } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import { formatDistanceToNow } from "date-fns"
 import { ExternalLink, Loader2, Sparkles, CheckCircle, Clock } from "lucide-react"
 
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { toast } from "sonner"
+import { useUserFeeds } from "@/hooks/use-queries"
 
 interface ScheduledPost {
   id: string
@@ -38,59 +38,36 @@ interface FeedItem {
 
 export function FeedContent() {
   const searchParams = useSearchParams()
-  const [feeds, setFeeds] = useState<FeedItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
   const [page, setPage] = useState(1)
+  const [allFeeds, setAllFeeds] = useState<FeedItem[]>([])
 
-  const topicId = searchParams.get("topic")
+  const topicId = searchParams.get("topic") || undefined
 
+  // Fetch current page
+  const { data, isLoading, isFetching } = useUserFeeds(topicId, page)
+
+  // Reset to page 1 when topic changes
   useEffect(() => {
-    setFeeds([])
     setPage(1)
-    setHasMore(true)
-    fetchFeeds(1, true)
+    setAllFeeds([])
   }, [topicId])
 
-  async function fetchFeeds(pageNum: number, reset = false) {
-    if (reset) {
-      setLoading(true)
-    } else {
-      setLoadingMore(true)
-    }
-
-    try {
-      const params = new URLSearchParams({
-        page: pageNum.toString(),
-        limit: "12",
-      })
-      if (topicId) {
-        params.set("topic", topicId)
-      }
-
-      const response = await fetch(`/api/user/feeds?${params.toString()}`)
-      if (!response.ok) throw new Error("Failed to fetch feeds")
-
-      const data = await response.json()
-
-      if (reset) {
-        setFeeds(data.feeds)
+  // Update accumulated feeds when new data arrives
+  useEffect(() => {
+    if (data) {
+      if (page === 1) {
+        setAllFeeds(data.feeds)
       } else {
-        setFeeds((prev) => [...prev, ...data.feeds])
+        setAllFeeds((prev) => [...prev, ...data.feeds])
       }
-
-      setHasMore(data.hasMore)
-      setPage(pageNum)
-    } catch {
-      toast.error("Failed to load content")
-    } finally {
-      setLoading(false)
-      setLoadingMore(false)
     }
-  }
+  }, [data, page])
 
-  if (loading) {
+  const feeds = allFeeds
+  const hasMore = data?.hasMore ?? false
+  const loadingMore = isFetching && page > 1
+
+  if (isLoading && page === 1) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[...Array(6)].map((_, i) => (
@@ -174,11 +151,11 @@ export function FeedContent() {
                 ) : (
                   <div className="flex flex-1 items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:bg-blue-950/20 dark:text-blue-400">
                     <Clock className="h-3.5 w-3.5 animate-pulse" />
-                    <span>Being scheduled for you...</span>
+                    <span>Being scheduled for you…</span>
                   </div>
                 )}
                 <Button variant="outline" size="sm" asChild>
-                  <a href={feed.url} target="_blank" rel="noopener noreferrer">
+                  <a href={feed.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${feed.title} in new tab`}>
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 </Button>
@@ -192,13 +169,13 @@ export function FeedContent() {
         <div className="flex justify-center pt-4">
           <Button
             variant="outline"
-            onClick={() => fetchFeeds(page + 1)}
+            onClick={() => setPage((p) => p + 1)}
             disabled={loadingMore}
           >
             {loadingMore ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Loading...
+                Loading…
               </>
             ) : (
               "Load More"

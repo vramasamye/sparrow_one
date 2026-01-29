@@ -96,7 +96,7 @@ export function GeneratePostDialog({ feed, open, onOpenChange }: GeneratePostDia
         setRemainingToday(remainingToday - 1)
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to generate post")
+      toast.error(err instanceof Error ? err.message : "Failed to generate post. Please try again.")
     } finally {
       setGenerating(false)
     }
@@ -124,7 +124,7 @@ export function GeneratePostDialog({ feed, open, onOpenChange }: GeneratePostDia
       onOpenChange(false)
       setGeneratedContent("")
     } catch {
-      toast.error("Failed to schedule post")
+      toast.error("Failed to schedule post. Please try again.")
     } finally {
       setScheduling(false)
     }
@@ -220,7 +220,7 @@ export function GeneratePostDialog({ feed, open, onOpenChange }: GeneratePostDia
               <div className="flex h-40 items-center justify-center rounded-lg border bg-muted">
                 <div className="text-center">
                   <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
-                  <p className="mt-2 text-sm text-muted-foreground">Generating content...</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Generating content…</p>
                 </div>
               </div>
             ) : generatedContent ? (
@@ -229,6 +229,8 @@ export function GeneratePostDialog({ feed, open, onOpenChange }: GeneratePostDia
                   className="min-h-40 w-full resize-none rounded-lg border bg-background p-3 text-sm"
                   value={generatedContent}
                   onChange={(e) => setGeneratedContent(e.target.value)}
+                  aria-label="Generated post content"
+                  name="post-content"
                 />
                 <div
                   className={`text-right text-xs ${isOverLimit ? "text-destructive" : "text-muted-foreground"}`}
@@ -257,7 +259,7 @@ export function GeneratePostDialog({ feed, open, onOpenChange }: GeneratePostDia
             {scheduling ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Scheduling...
+                Scheduling…
               </>
             ) : (
               "Schedule Post"

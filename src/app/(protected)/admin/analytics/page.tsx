@@ -9,11 +9,12 @@ import {
   Users,
   XCircle,
 } from "lucide-react"
+import { cache } from "react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { prisma } from "@/lib/prisma"
 
-async function getAnalytics() {
+const getAnalytics = cache(async () => {
   const now = new Date()
   const sevenDaysAgo = subDays(now, 7)
   const thirtyDaysAgo = subDays(now, 30)
@@ -116,7 +117,7 @@ async function getAnalytics() {
     topTopics: topicsStats,
     platformStats,
   }
-}
+})
 
 export default async function AdminAnalyticsPage() {
   const analytics = await getAnalytics()

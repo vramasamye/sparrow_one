@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { prisma } from "./prisma"
 import { parseFeed, type ParsedFeedItem } from "./rss-parser"
 
@@ -277,7 +278,7 @@ async function addFeedItem(
 /**
  * Get processing statistics
  */
-export async function getProcessingStats() {
+export const getProcessingStats = cache(async () => {
   const [pendingCount, approvedCount, rejectedCount, publishedCount, feedCount] =
     await Promise.all([
       prisma.feed.count({ where: { status: "PENDING" } }),
@@ -294,4 +295,4 @@ export async function getProcessingStats() {
     published: publishedCount,
     activeFeeds: feedCount,
   }
-}
+})

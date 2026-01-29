@@ -13,11 +13,11 @@ export default function PostsPage() {
         </p>
       </div>
 
-      <Suspense fallback={<div>Loading stats...</div>}>
+      <Suspense fallback={<div>Loading stats…</div>}>
         <PostsStats />
       </Suspense>
 
-      <Suspense fallback={<div>Loading posts...</div>}>
+      <Suspense fallback={<div>Loading posts…</div>}>
         <PostsList />
       </Suspense>
     </div>

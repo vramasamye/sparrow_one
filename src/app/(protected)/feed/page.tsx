@@ -13,11 +13,11 @@ export default function FeedPage() {
         </p>
       </div>
 
-      <Suspense fallback={<div>Loading filters...</div>}>
+      <Suspense fallback={<div>Loading filters…</div>}>
         <FeedFilters />
       </Suspense>
 
-      <Suspense fallback={<div>Loading content...</div>}>
+      <Suspense fallback={<div>Loading content…</div>}>
         <FeedContent />
       </Suspense>
     </div>
