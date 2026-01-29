@@ -32,15 +32,34 @@ export async function GET(request: Request) {
   console.log("🔄 Starting queue processor...")
   const startTime = Date.now()
 
+  // Helper function to retry database operations (for Neon wake-up)
+  async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+    let lastError: Error | null = null
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await fn()
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+        if (attempt < maxAttempts && lastError.message.includes("Can't reach database")) {
+          console.log(`  ⚠️  Database connection failed, retrying (${attempt}/${maxAttempts})...`)
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        } else if (attempt >= maxAttempts) {
+          throw lastError
+        }
+      }
+    }
+    throw lastError
+  }
+
   try {
-    // 1. Recover any stuck jobs from previous crashes
-    const recovered = await recoverStuckJobs()
+    // 1. Recover any stuck jobs from previous crashes (with retry)
+    const recovered = await withRetry(() => recoverStuckJobs())
     if (recovered > 0) {
       console.log(`  🔄 Recovered ${recovered} stuck jobs`)
     }
 
-    // 2. Get queue stats
-    const stats = await getQueueStats()
+    // 2. Get queue stats (with retry)
+    const stats = await withRetry(() => getQueueStats())
     console.log(`  📊 Queue stats: ${stats.queued} queued, ${stats.processing} processing`)
 
     if (stats.queued === 0) {
