@@ -105,22 +105,35 @@ export async function generatePostsForFeed(feedId: string): Promise<{
 
     console.error(`❌ Failed to generate posts for feed ${feedId}:`, errorMessage)
 
-    // Update status to FAILED
-    await prisma.generatedPost.upsert({
-      where: { feedId },
-      create: {
-        feedId,
-        twitterContent: "",
-        linkedinContent: "",
-        status: "FAILED",
-        errorMessage
-      },
-      update: {
-        status: "FAILED",
-        errorMessage,
-        retryCount: { increment: 1 }
+    // If feed doesn't exist, don't try to create GeneratedPost (would fail foreign key constraint)
+    if (errorMessage.includes("not found")) {
+      return {
+        success: false,
+        error: errorMessage
       }
-    })
+    }
+
+    // Update status to FAILED for other errors
+    try {
+      await prisma.generatedPost.upsert({
+        where: { feedId },
+        create: {
+          feedId,
+          twitterContent: "",
+          linkedinContent: "",
+          status: "FAILED",
+          errorMessage
+        },
+        update: {
+          status: "FAILED",
+          errorMessage,
+          retryCount: { increment: 1 }
+        }
+      })
+    } catch (dbError) {
+      // If upsert fails (e.g., feed was deleted between checks), just log it
+      console.error(`Failed to update GeneratedPost status:`, dbError)
+    }
 
     return {
       success: false,

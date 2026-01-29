@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { enqueueApprovedFeed } from "@/lib/queue"
+import { enqueueApprovedFeed, removeJobsForFeed } from "@/lib/queue"
 
 export async function PATCH(
   request: Request,
@@ -83,9 +83,13 @@ export async function DELETE(
   const { id } = await params
 
   try {
+    // Remove from database (cascades to GeneratedPost)
     await prisma.feed.delete({
       where: { id },
     })
+
+    // Remove from queue (if queued)
+    await removeJobsForFeed(id)
 
     return NextResponse.json({ success: true })
   } catch (error) {

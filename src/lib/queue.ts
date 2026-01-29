@@ -1,4 +1,5 @@
 import { redis } from "@/lib/redis"
+import { prisma } from "@/lib/prisma"
 
 /**
  * Simple Redis-based queue for processing approved feeds
@@ -107,7 +108,46 @@ export async function clearQueue(): Promise<void> {
 }
 
 /**
+ * Remove all queue jobs for a specific feed
+ * Call this when a feed is deleted
+ */
+export async function removeJobsForFeed(feedId: string): Promise<number> {
+  let removedCount = 0
+
+  // Remove from queue
+  const queuedJobs = await redis.zrange(QUEUE_KEY, 0, -1)
+  const pipeline = redis.pipeline()
+
+  for (const jobData of queuedJobs) {
+    const job: QueueJob = JSON.parse(jobData)
+    if (job.feedId === feedId) {
+      pipeline.zrem(QUEUE_KEY, jobData)
+      removedCount++
+    }
+  }
+
+  // Remove from processing
+  const processingJobs = await redis.smembers(PROCESSING_KEY)
+  for (const jobData of processingJobs) {
+    const job: QueueJob = JSON.parse(jobData)
+    if (job.feedId === feedId) {
+      pipeline.srem(PROCESSING_KEY, jobData)
+      removedCount++
+    }
+  }
+
+  await pipeline.exec()
+
+  if (removedCount > 0) {
+    console.log(`🗑️  Removed ${removedCount} queue jobs for feed ${feedId}`)
+  }
+
+  return removedCount
+}
+
+/**
  * Recover jobs stuck in processing (call this on startup or periodically)
+ * Validates feed existence before re-queuing to avoid orphaned jobs
  */
 export async function recoverStuckJobs(): Promise<number> {
   const processingJobs = await redis.smembers(PROCESSING_KEY)
@@ -116,17 +156,41 @@ export async function recoverStuckJobs(): Promise<number> {
     return 0
   }
 
-  // Move all processing jobs back to queue
+  // Validate feeds exist and only recover valid jobs
   const pipeline = redis.pipeline()
+  let recoveredCount = 0
+  let discardedCount = 0
 
   for (const jobData of processingJobs) {
     const job: QueueJob = JSON.parse(jobData)
-    pipeline.zadd(QUEUE_KEY, job.priority || Date.now(), jobData)
-    pipeline.srem(PROCESSING_KEY, jobData)
+
+    // Check if feed still exists
+    const feedExists = await prisma.feed.findUnique({
+      where: { id: job.feedId },
+      select: { id: true }
+    })
+
+    if (feedExists) {
+      // Re-queue valid job
+      pipeline.zadd(QUEUE_KEY, job.priority || Date.now(), jobData)
+      pipeline.srem(PROCESSING_KEY, jobData)
+      recoveredCount++
+    } else {
+      // Discard job for deleted feed
+      pipeline.srem(PROCESSING_KEY, jobData)
+      discardedCount++
+      console.log(`🗑️  Discarded stuck job for deleted feed ${job.feedId}`)
+    }
   }
 
   await pipeline.exec()
 
-  console.log(`🔄 Recovered ${processingJobs.length} stuck jobs`)
-  return processingJobs.length
+  if (recoveredCount > 0) {
+    console.log(`🔄 Recovered ${recoveredCount} stuck jobs`)
+  }
+  if (discardedCount > 0) {
+    console.log(`🗑️  Discarded ${discardedCount} jobs for deleted feeds`)
+  }
+
+  return recoveredCount
 }
