@@ -156,6 +156,12 @@ model RssFeed {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
+  // Source authority and performance tracking
+  authorityScore  Int           @default(10)    // 0-20, learned over time
+  totalProcessed  Int           @default(0)     // Total feeds from this source
+  totalApproved   Int           @default(0)     // How many got approved
+  approvalRate    Float?                        // approved / total
+
   topic Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
   feeds Feed[]
 
@@ -181,6 +187,27 @@ model Feed {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
+  // Scoring system
+  sourceAuthorityScore Int      @default(0)      // 0-20 points
+  recencyScore         Int      @default(0)      // 0-15 points
+  metadataScore        Int      @default(0)      // 0-15 points
+  qualityScore         Int      @default(0)      // 0-100 total
+
+  // AI Moderation (Llama Guard)
+  moderationScore      Float?                    // 0-1 confidence
+  moderationCategory   String?                   // unsafe/safe/sales/spam
+  moderationReasoning  String?   @db.Text
+
+  // Flags
+  isSafe               Boolean   @default(true)
+  isSalesContent       Boolean   @default(false)
+  hasPromoCodes        Boolean   @default(false)
+  isClickbait          Boolean   @default(false)
+  isTrending           Boolean   @default(false)
+  autoApproved         Boolean   @default(false)
+  autoRejected         Boolean   @default(false)
+  scoredAt             DateTime?
+
   topic          Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
   rssFeed        RssFeed         @relation(fields: [rssFeedId], references: [id], onDelete: Cascade)
   scheduledPosts ScheduledPost[]
@@ -189,6 +216,10 @@ model Feed {
   @@index([status])
   @@index([topicId])
   @@index([createdAt])
+  @@index([qualityScore])
+  @@index([isSafe])
+  @@index([autoApproved])
+  @@index([scoredAt])
   @@map("feeds")
 }
 

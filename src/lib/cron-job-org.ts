@@ -172,6 +172,7 @@ export interface CronStrategyConfig {
   description: string
   totalRuns: number
   jobs: {
+    scoreFeeds?: { enabled: boolean; schedule: CronJobSchedule }
     processQueue?: { enabled: boolean; schedule: CronJobSchedule }
     publishPosts?: { enabled: boolean; schedule: CronJobSchedule }
     processFeeds?: { enabled: boolean; schedule: CronJobSchedule }
@@ -189,8 +190,19 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
       return {
         name: 'Balanced',
         description: 'Optimized balance between queue processing and post publishing',
-        totalRuns: 96,
+        totalRuns: 144, // 72 (processQueue) + 24 (publishPosts) + 48 (scoreFeeds)
         jobs: {
+          scoreFeeds: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [-1],
+              minutes: [0, 30], // Every 30 minutes (48/day, 2,880 feeds/day)
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
           processQueue: {
             enabled: true,
             schedule: {
@@ -232,8 +244,19 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
       return {
         name: 'Light',
         description: 'Minimal automation - only critical jobs (manual workflow)',
-        totalRuns: 48,
+        totalRuns: 96, // 48 (processQueue) + 24 (publishPosts) + 24 (scoreFeeds)
         jobs: {
+          scoreFeeds: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [-1],
+              minutes: [0], // Every hour (24/day, 1,440 feeds/day)
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
           processQueue: {
             enabled: true,
             schedule: {
@@ -275,8 +298,19 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
       return {
         name: 'Full Automation',
         description: 'Complete automation with all background tasks',
-        totalRuns: 50,
+        totalRuns: 98, // 12 (processQueue) + 24 (publishPosts) + 12 (processFeeds) + 48 (scoreFeeds) + 1 (refreshTokens) + 1 (cleanup)
         jobs: {
+          scoreFeeds: {
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [-1],
+              minutes: [0, 30], // Every 30 minutes (48/day, 2,880 feeds/day)
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
+          },
           processQueue: {
             enabled: true,
             schedule: {
@@ -344,9 +378,10 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
  * Setup all cron jobs on cron-job.org
  * Supports multiple strategies for different use cases
  *
- * @param strategy - 'balanced' (96/day), 'light' (48/day), or 'full' (50/day)
+ * @param strategy - 'balanced' (144/day), 'light' (96/day), or 'full' (98/day)
  */
 export async function setupAllCronJobs(strategy: CronStrategy = 'balanced'): Promise<{
+  scoreFeeds?: number
   feedProcessing?: number
   publishPosts?: number
   processQueue?: number
@@ -417,7 +452,24 @@ export async function setupAllCronJobs(strategy: CronStrategy = 'balanced'): Pro
     return createResult.jobId
   }
 
-  // 1. Process Queue
+  // 1. Score Feeds (Llama Guard 4)
+  if (config.jobs.scoreFeeds?.enabled) {
+    console.log("\n🎯 Setting up Score Feeds cron (Llama Guard 4)...")
+    const scoreFeedsConfig: CronJobConfig = {
+      title: "Sparrow - Score Feeds",
+      url: `https://${appUrl}/api/cron/score-feeds?secret=${encodeURIComponent(cronSecret)}`,
+      enabled: true,
+      saveResponses: true,
+      requestMethod: 1,
+      requestTimeout: 120, // 2 minutes for 60 feeds at 2 sec/feed
+      schedule: config.jobs.scoreFeeds.schedule
+    }
+    jobIds.scoreFeeds = await createOrUpdateJob(scoreFeedsConfig, 'scoreFeeds')
+  } else {
+    console.log("\n🎯 Score Feeds: Disabled (manual only)")
+  }
+
+  // 2. Process Queue
   if (config.jobs.processQueue?.enabled) {
     console.log("\n⚙️  Setting up Process Queue cron...")
     const queueConfig: CronJobConfig = {
@@ -434,7 +486,7 @@ export async function setupAllCronJobs(strategy: CronStrategy = 'balanced'): Pro
     console.log("\n⚙️  Process Queue: Disabled (manual only)")
   }
 
-  // 2. Publish Posts
+  // 3. Publish Posts
   if (config.jobs.publishPosts?.enabled) {
     console.log("\n📤 Setting up Publish Posts cron...")
     const publishConfig: CronJobConfig = {
@@ -451,7 +503,7 @@ export async function setupAllCronJobs(strategy: CronStrategy = 'balanced'): Pro
     console.log("\n📤 Publish Posts: Disabled (manual only)")
   }
 
-  // 3. Feed Processing
+  // 4. Feed Processing
   if (config.jobs.processFeeds?.enabled) {
     console.log("\n📥 Setting up Feed Processing cron...")
     const feedProcessingConfig: CronJobConfig = {
@@ -468,7 +520,7 @@ export async function setupAllCronJobs(strategy: CronStrategy = 'balanced'): Pro
     console.log("\n📥 Feed Processing: Disabled (manual only)")
   }
 
-  // 4. Refresh Tokens
+  // 5. Refresh Tokens
   if (config.jobs.refreshTokens?.enabled) {
     console.log("\n🔄 Setting up Refresh Tokens cron...")
     const refreshConfig: CronJobConfig = {
@@ -485,7 +537,7 @@ export async function setupAllCronJobs(strategy: CronStrategy = 'balanced'): Pro
     console.log("\n🔄 Refresh Tokens: Disabled (manual only)")
   }
 
-  // 5. Cleanup
+  // 6. Cleanup
   if (config.jobs.cleanup?.enabled) {
     console.log("\n🗑️  Setting up Cleanup cron...")
     const cleanupConfig: CronJobConfig = {

@@ -1,6 +1,8 @@
 import { cache } from "react"
 import { prisma } from "./prisma"
 import { parseFeed, type ParsedFeedItem } from "./rss-parser"
+import { scoreFeed } from "./feed-scorer"
+import { enqueueApprovedFeed } from "./queue"
 
 export interface ProcessingResult {
   feedId: string

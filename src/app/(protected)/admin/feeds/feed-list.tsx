@@ -22,6 +22,21 @@ interface Feed {
   status: string
   topic: { name: string }
   rssFeed: { name: string }
+  // Scoring fields
+  qualityScore: number | null
+  sourceAuthorityScore: number | null
+  recencyScore: number | null
+  metadataScore: number | null
+  moderationScore: number | null
+  moderationCategory: string | null
+  moderationReasoning: string | null
+  isSafe: boolean | null
+  isSalesContent: boolean | null
+  hasPromoCodes: boolean | null
+  isClickbait: boolean | null
+  autoApproved: boolean | null
+  autoRejected: boolean | null
+  scoredAt: string | null
 }
 
 export function FeedList() {
@@ -228,13 +243,48 @@ export function FeedList() {
                       <ExternalLink className="h-4 w-4" />
                     </a>
                   </div>
-                  <CardDescription className="flex items-center gap-2">
+                  <CardDescription className="flex items-center gap-2 flex-wrap">
                     <Badge variant="secondary">{feed.topic.name}</Badge>
                     <span>from {feed.rssFeed.name}</span>
                     {feed.publishedAt && (
                       <span>
                         {format(new Date(feed.publishedAt), "MMM d, yyyy")}
                       </span>
+                    )}
+                    {/* Quality Score Badge */}
+                    {feed.qualityScore !== null && (
+                      <Badge
+                        variant={
+                          feed.qualityScore >= 80 ? "default" :
+                          feed.qualityScore >= 60 ? "secondary" :
+                          "destructive"
+                        }
+                        className="ml-2"
+                      >
+                        Score: {feed.qualityScore}/100
+                      </Badge>
+                    )}
+                    {/* Auto-approval badges */}
+                    {feed.autoApproved && (
+                      <Badge variant="outline" className="border-green-500 text-green-600">
+                        Auto-Approved
+                      </Badge>
+                    )}
+                    {feed.autoRejected && (
+                      <Badge variant="outline" className="border-red-500 text-red-600">
+                        Auto-Rejected
+                      </Badge>
+                    )}
+                    {/* Safety flags */}
+                    {feed.isSalesContent && (
+                      <Badge variant="destructive" className="text-xs">
+                        Sales Content
+                      </Badge>
+                    )}
+                    {feed.hasPromoCodes && (
+                      <Badge variant="destructive" className="text-xs">
+                        Promo Code
+                      </Badge>
                     )}
                   </CardDescription>
                 </div>
@@ -245,6 +295,56 @@ export function FeedList() {
                 <p className="mb-4 text-sm text-muted-foreground line-clamp-3">
                   {feed.summary}
                 </p>
+              )}
+
+              {/* AI Scoring Details */}
+              {feed.scoredAt && (
+                <div className="mb-4 rounded-lg border bg-muted/30 p-3 text-sm">
+                  <div className="font-medium mb-2 flex items-center justify-between">
+                    <span>AI Quality Analysis</span>
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(feed.scoredAt), "MMM d, h:mm a")}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {feed.sourceAuthorityScore !== null && (
+                      <div>
+                        <span className="text-muted-foreground">Source Authority:</span>
+                        <span className="ml-1 font-medium">{feed.sourceAuthorityScore}/20</span>
+                      </div>
+                    )}
+                    {feed.recencyScore !== null && (
+                      <div>
+                        <span className="text-muted-foreground">Recency:</span>
+                        <span className="ml-1 font-medium">{feed.recencyScore}/15</span>
+                      </div>
+                    )}
+                    {feed.metadataScore !== null && (
+                      <div>
+                        <span className="text-muted-foreground">Metadata:</span>
+                        <span className="ml-1 font-medium">{feed.metadataScore}/15</span>
+                      </div>
+                    )}
+                    {feed.moderationScore !== null && (
+                      <div>
+                        <span className="text-muted-foreground">AI Confidence:</span>
+                        <span className="ml-1 font-medium">{Math.round(feed.moderationScore * 100)}%</span>
+                      </div>
+                    )}
+                  </div>
+                  {feed.moderationReasoning && (
+                    <div className="mt-2 pt-2 border-t text-xs text-muted-foreground">
+                      <span className="font-medium">Reasoning:</span> {feed.moderationReasoning}
+                    </div>
+                  )}
+                  {feed.moderationCategory && feed.moderationCategory !== 'safe' && (
+                    <div className="mt-1 text-xs">
+                      <Badge variant="destructive" className="text-xs">
+                        {feed.moderationCategory}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
               )}
 
               {status === "PENDING" && (

@@ -20,6 +20,7 @@
     "setup-cron:balanced": "npx tsx scripts/setup-cron.ts balanced",
     "setup-cron:light": "npx tsx scripts/setup-cron.ts light",
     "setup-cron:full": "npx tsx scripts/setup-cron.ts full",
+    "score-feeds": "npx tsx scripts/score-feeds.ts",
     "import-topics": "npx tsx scripts/import-topics.ts"
   },
   "dependencies": {
