@@ -5,8 +5,9 @@ import { verifyCronAuth } from "@/lib/cron-auth"
 
 /**
  * Post Publishing Cron Job
- * Schedule: Every 5 minutes
- * Publishes scheduled posts that are due
+ * Schedule: Every 1 minute (managed by cron-job.org)
+ * Publishes scheduled posts sequentially, one user at a time
+ * Processes up to 10 posts per run to avoid rate limits
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization")

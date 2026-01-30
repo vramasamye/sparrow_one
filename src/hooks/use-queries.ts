@@ -83,6 +83,21 @@ interface Feed {
   status: string
   topic: { name: string }
   rssFeed: { name: string }
+  // Scoring fields
+  qualityScore: number | null
+  sourceAuthorityScore: number | null
+  recencyScore: number | null
+  metadataScore: number | null
+  moderationScore: number | null
+  moderationCategory: string | null
+  moderationReasoning: string | null
+  isSafe: boolean | null
+  isSalesContent: boolean | null
+  hasPromoCodes: boolean | null
+  isClickbait: boolean | null
+  autoApproved: boolean | null
+  autoRejected: boolean | null
+  scoredAt: string | null
 }
 
 export function useAdminFeeds(status: string) {

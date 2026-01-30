@@ -7,15 +7,16 @@ This guide explains how to set up automated cron jobs for Sparrow using cron-job
 Sparrow supports three cron strategies, each optimized for different use cases while staying within the 100 runs/day limit.
 
 ### 🎯 Balanced (Recommended)
-**96 runs/day** - Optimal balance between automation and manual control
+**1,560 runs/day** - Optimal balance between automation and manual control
 
 ```bash
 npm run setup-cron:balanced
 ```
 
 **Automated Jobs:**
+- 📤 Publish Posts: Every 1 minute (1,440/day) - sequential per user
 - ⚙️  Process Queue: Every 20 minutes (72/day)
-- 📤 Publish Posts: Every 1 hour (24/day)
+- 🎯 Score Feeds: Every 30 minutes (48/day)
 
 **Manual Jobs:**
 - 📥 Feed Processing: Run when you want fresh RSS articles
@@ -23,23 +24,25 @@ npm run setup-cron:balanced
 - 🗑️  Cleanup: Run monthly to clean up old data
 
 **Best for:**
+- Instant post publishing (within 1 minute of schedule)
 - Fast queue processing (~13 hours to clear 38 feeds)
-- Posts publish within 1 hour of schedule
+- Automatic content scoring with Llama Guard
 - Manual control over RSS fetching
 - Most users
 
 ---
 
 ### 💡 Light
-**48 runs/day** - Minimal automation for manual workflow
+**1,512 runs/day** - Balanced automation with instant publishing
 
 ```bash
 npm run setup-cron:light
 ```
 
 **Automated Jobs:**
+- 📤 Publish Posts: Every 1 minute (1,440/day) - sequential per user
 - ⚙️  Process Queue: Every 30 minutes (48/day)
-- 📤 Publish Posts: Every 1 hour at :15 (24/day)
+- 🎯 Score Feeds: Every 1 hour (24/day)
 
 **Manual Jobs:**
 - 📥 Feed Processing: Manual only
@@ -47,28 +50,31 @@ npm run setup-cron:light
 - 🗑️  Cleanup: Manual only
 
 **Best for:**
-- Users who prefer manual control
-- Lower resource usage
+- Instant post publishing (within 1 minute of schedule)
+- Users who prefer manual control over RSS fetching
+- Automatic content scoring
 - Testing and development
 
 ---
 
 ### 🚀 Full Automation
-**50 runs/day** - Complete hands-off automation
+**1,514 runs/day** - Complete hands-off automation
 
 ```bash
 npm run setup-cron:full
 ```
 
 **Automated Jobs:**
+- 📤 Publish Posts: Every 1 minute (1,440/day) - sequential per user
+- 🎯 Score Feeds: Every 30 minutes (48/day)
 - ⚙️  Process Queue: Every 2 hours (12/day)
-- 📤 Publish Posts: Every 1 hour at :15 (24/day)
 - 📥 Feed Processing: Every 2 hours (12/day)
 - 🔄 Refresh Tokens: Daily at 12:30am UTC (1/day)
 - 🗑️  Cleanup: Daily at 3:00am UTC (1/day)
 
 **Best for:**
 - Completely automated operation
+- Instant post publishing (within 1 minute)
 - Set it and forget it
 - Users who don't want to manage cron jobs
 
@@ -155,14 +161,16 @@ https://your-app.vercel.app/api/cron/cleanup?secret=YOUR_SECRET
 
 | Feature | Balanced | Light | Full |
 |---------|----------|-------|------|
-| **Runs/day** | 96 | 48 | 50 |
+| **Runs/day** | 1,560 | 1,512 | 1,514 |
+| **Post publishing** | Every 1 min | Every 1 min | Every 1 min |
 | **Queue processing** | Every 20 min | Every 30 min | Every 2 hrs |
-| **Post publishing** | Every 1 hr | Every 1 hr | Every 1 hr |
+| **Feed scoring** | Every 30 min | Every 1 hr | Every 30 min |
 | **RSS fetching** | Manual | Manual | Automated |
 | **Token refresh** | Manual | Manual | Automated |
 | **Cleanup** | Manual | Manual | Automated |
 | **Queue speed** | Fast (13 hrs) | Medium (19 hrs) | Slow (76 hrs) |
-| **Post delay** | Max 1 hr | Max 1 hr | Max 1 hr |
+| **Post delay** | Max 1 min | Max 1 min | Max 1 min |
+| **Publishing** | Sequential per user | Sequential per user | Sequential per user |
 | **Maintenance** | Low | Low | None |
 
 ---

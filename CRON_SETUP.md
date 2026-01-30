@@ -1,312 +1,288 @@
-# Cron Job Setup with cron-job.org
+# Cron Job Setup Guide
 
-This application uses [cron-job.org](https://cron-job.org) for scheduled task execution instead of Vercel's built-in cron jobs.
+This guide explains how to set up automated cron jobs for Sparrow using cron-job.org.
 
-## Why cron-job.org?
+## Available Strategies
 
-- **Free tier**: 100 API requests per day
-- **Reliable**: Dedicated cron service with monitoring
-- **Flexible**: Easy to manage and monitor via web console
-- **No Vercel limitations**: Works with any hosting provider
-- **Multiple schedules**: Run different tasks at optimal frequencies
+Sparrow supports three cron strategies, each optimized for different use cases while staying within the 100 runs/day limit.
 
-## Architecture
-
-The system uses **5 separate cron jobs**, each optimized for its task:
-
-| Job | Schedule | Triggers/Day | Purpose |
-|-----|----------|--------------|---------|
-| **Feed Processing** | Every 2 hours | 12 | Fetch new articles from RSS feeds |
-| **Publish Posts** | Every hour | 24 | Publish scheduled social media posts |
-| **Process Queue** | Every 2 hours | 12 | Generate AI posts from approved feeds |
-| **Refresh Tokens** | Once daily | 1 | Refresh social media OAuth tokens |
-| **Cleanup** | Once daily | 1 | Remove old pending feeds |
-| **TOTAL** | - | **50** | Under 100/day limit ✓ |
-
-This architecture:
-- Stays well under the 100 trigger/day limit (50% utilization)
-- Runs high-priority tasks (publishing) more frequently
-- Runs maintenance tasks (cleanup, tokens) only when needed
-- Distributes load across the day to avoid timeouts
-
-## Setup Instructions
-
-### 1. Create a cron-job.org Account
-
-1. Visit [cron-job.org](https://cron-job.org) and create a free account
-2. Go to [Console Settings](https://console.cron-job.org/settings)
-3. Generate an API key under the "API" section
-4. Copy the API key - you'll need it for the next step
-
-### 2. Configure Environment Variables
-
-Add the following to your `.env.local` file (and your deployment environment):
+### 🎯 Balanced (Recommended)
+**1,560 runs/day** - Optimal balance between automation and manual control
 
 ```bash
-# cron-job.org API Key
+npm run setup-cron:balanced
+```
+
+**Automated Jobs:**
+- 📤 Publish Posts: Every 1 minute (1,440/day) - sequential per user
+- ⚙️  Process Queue: Every 20 minutes (72/day)
+- 🎯 Score Feeds: Every 30 minutes (48/day)
+
+**Manual Jobs:**
+- 📥 Feed Processing: Run when you want fresh RSS articles
+- 🔄 Refresh Tokens: Run weekly to keep OAuth tokens fresh
+- 🗑️  Cleanup: Run monthly to clean up old data
+
+**Best for:**
+- Instant post publishing (within 1 minute of schedule)
+- Fast queue processing (~13 hours to clear 38 feeds)
+- Automatic content scoring with Llama Guard
+- Manual control over RSS fetching
+- Most users
+
+---
+
+### 💡 Light
+**1,512 runs/day** - Balanced automation with instant publishing
+
+```bash
+npm run setup-cron:light
+```
+
+**Automated Jobs:**
+- 📤 Publish Posts: Every 1 minute (1,440/day) - sequential per user
+- ⚙️  Process Queue: Every 30 minutes (48/day)
+- 🎯 Score Feeds: Every 1 hour (24/day)
+
+**Manual Jobs:**
+- 📥 Feed Processing: Manual only
+- 🔄 Refresh Tokens: Manual only
+- 🗑️  Cleanup: Manual only
+
+**Best for:**
+- Instant post publishing (within 1 minute of schedule)
+- Users who prefer manual control over RSS fetching
+- Automatic content scoring
+- Testing and development
+
+---
+
+### 🚀 Full Automation
+**1,514 runs/day** - Complete hands-off automation
+
+```bash
+npm run setup-cron:full
+```
+
+**Automated Jobs:**
+- 📤 Publish Posts: Every 1 minute (1,440/day) - sequential per user
+- 🎯 Score Feeds: Every 30 minutes (48/day)
+- ⚙️  Process Queue: Every 2 hours (12/day)
+- 📥 Feed Processing: Every 2 hours (12/day)
+- 🔄 Refresh Tokens: Daily at 12:30am UTC (1/day)
+- 🗑️  Cleanup: Daily at 3:00am UTC (1/day)
+
+**Best for:**
+- Completely automated operation
+- Instant post publishing (within 1 minute)
+- Set it and forget it
+- Users who don't want to manage cron jobs
+
+---
+
+## Quick Start
+
+### 1. Prerequisites
+
+Set up your environment variables in `.env.local`:
+
+```env
 CRON_JOB_ORG_API_KEY=your_api_key_here
-
-# CRON_SECRET for authenticating incoming cron requests (keep existing value)
-CRON_SECRET=your_existing_cron_secret
-
-# Your application URL (Vercel provides this automatically in production)
+CRON_SECRET=your_cron_secret_here
 NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
 ```
 
-**Vercel Environment Variables:**
-1. Go to your Vercel project settings
-2. Navigate to Environment Variables
-3. Add `CRON_JOB_ORG_API_KEY` with your API key
-4. Ensure `CRON_SECRET` is already set
-5. `NEXT_PUBLIC_APP_URL` is automatically available as `VERCEL_URL`
+**Get your cron-job.org API key:**
+1. Go to https://console.cron-job.org
+2. Settings → API
+3. Generate API key
 
-### 3. Run the Setup Script
+### 2. Choose Your Strategy
 
-After deploying your application, run:
+Run one of these commands:
 
 ```bash
+# Balanced (recommended)
+npm run setup-cron:balanced
+
+# Light (minimal automation)
+npm run setup-cron:light
+
+# Full (complete automation)
+npm run setup-cron:full
+
+# Default (uses balanced)
 npm run setup-cron
 ```
 
-This script will:
-- Validate your environment variables
-- Create **5 separate cron jobs** on cron-job.org
-- Configure each with its optimal schedule
-- Set up authentication using your CRON_SECRET
-- Display all created job IDs
+### 3. Verify Setup
 
-**Expected Output:**
+1. Visit https://console.cron-job.org
+2. Check that jobs were created/updated
+3. Verify schedules match your chosen strategy
+4. Click "Run now" to test each job
+
+---
+
+## Manual Job URLs
+
+For manual jobs, bookmark these URLs (replace `YOUR_SECRET` with your `CRON_SECRET`):
+
+### Feed Processing
+Fetch new RSS articles from all active feeds.
+
 ```
-Creating 5 separate cron jobs with optimized schedules...
-
-📥 Setting up Feed Processing cron...
-✓ Created (ID: 12345)
-
-📤 Setting up Publish Posts cron...
-✓ Created (ID: 12346)
-
-⚙️  Setting up Process Queue cron...
-✓ Created (ID: 12347)
-
-🔄 Setting up Refresh Tokens cron...
-✓ Created (ID: 12348)
-
-🗑️  Setting up Cleanup cron...
-✓ Created (ID: 12349)
-
-✓ Setup completed successfully!
-
-Total triggers per day: 50 (under 100 limit) ✓
+https://your-app.vercel.app/api/cron/process-feeds?secret=YOUR_SECRET
 ```
 
-### 4. Verify Setup
+**When to run:** 2-4 times per day (morning, afternoon, evening, night)
 
-1. Visit [cron-job.org Console](https://console.cron-job.org)
-2. Check that all 5 jobs are listed:
-   - Sparrow - Feed Processing
-   - Sparrow - Publish Posts
-   - Sparrow - Process Queue
-   - Sparrow - Refresh Tokens
-   - Sparrow - Cleanup
-3. Verify each job is **enabled** and scheduled correctly
-4. Monitor the first execution of each job
+### Refresh Tokens
+Refresh expiring OAuth tokens (Twitter, LinkedIn).
 
-## How It Works
+```
+https://your-app.vercel.app/api/cron/refresh-tokens?secret=YOUR_SECRET
+```
 
-Each cron job sends a GET request to its specific endpoint with authentication:
+**When to run:** Once per week (tokens typically last 30+ days)
 
-### 1. Feed Processing (Every 2 hours)
-```
-GET https://your-app.vercel.app/api/cron/process-feeds?secret=YOUR_SECRET
-```
-- Fetches new articles from RSS feeds
-- First pull: Gets all January 2026 articles
-- Subsequent pulls: Gets articles since last fetch
-- Deduplicates using content hash
-- Cleans up old pending feeds
+### Cleanup
+Remove old rejected/pending feeds and cleanup database.
 
-### 2. Publish Posts (Every hour)
 ```
-GET https://your-app.vercel.app/api/cron/publish-posts?secret=YOUR_SECRET
+https://your-app.vercel.app/api/cron/cleanup?secret=YOUR_SECRET
 ```
-- Publishes scheduled posts due for publishing
-- Posts to Twitter/LinkedIn via OAuth
-- Updates post status and history
-- Handles retries on failures
 
-### 3. Process Queue (Every 2 hours)
-```
-GET https://your-app.vercel.app/api/cron/process-queue?secret=YOUR_SECRET
-```
-- Dequeues one feed from the generation queue
-- Generates AI posts using GROQ
-- Distributes posts to subscribers
-- Schedules posts across the week
+**When to run:** Once per month
 
-### 4. Refresh Tokens (Once daily at 00:30 UTC)
-```
-GET https://your-app.vercel.app/api/cron/refresh-tokens?secret=YOUR_SECRET
-```
-- Refreshes social media OAuth tokens before expiry
-- Updates encrypted tokens in database
-- Prevents authentication failures
+---
 
-### 5. Cleanup (Once daily at 03:00 UTC)
-```
-GET https://your-app.vercel.app/api/cron/cleanup?secret=YOUR_SECRET
-```
-- Removes old pending feeds (>24 hours)
-- Cleans up failed jobs
-- Optimizes database performance
+## Strategy Comparison
 
-## Manual Testing
+| Feature | Balanced | Light | Full |
+|---------|----------|-------|------|
+| **Runs/day** | 1,560 | 1,512 | 1,514 |
+| **Post publishing** | Every 1 min | Every 1 min | Every 1 min |
+| **Queue processing** | Every 20 min | Every 30 min | Every 2 hrs |
+| **Feed scoring** | Every 30 min | Every 1 hr | Every 30 min |
+| **RSS fetching** | Manual | Manual | Automated |
+| **Token refresh** | Manual | Manual | Automated |
+| **Cleanup** | Manual | Manual | Automated |
+| **Queue speed** | Fast (13 hrs) | Medium (19 hrs) | Slow (76 hrs) |
+| **Post delay** | Max 1 min | Max 1 min | Max 1 min |
+| **Publishing** | Sequential per user | Sequential per user | Sequential per user |
+| **Maintenance** | Low | Low | None |
 
-You can manually trigger any cron job using curl:
+---
+
+## Switching Strategies
+
+You can switch strategies at any time by running the setup script again:
 
 ```bash
-# Feed Processing
-curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
-  https://your-app.vercel.app/api/cron/process-feeds
-
-# Publish Posts
-curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
-  https://your-app.vercel.app/api/cron/publish-posts
-
-# Process Queue
-curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
-  https://your-app.vercel.app/api/cron/process-queue
-
-# Refresh Tokens
-curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
-  https://your-app.vercel.app/api/cron/refresh-tokens
-
-# Cleanup
-curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
-  https://your-app.vercel.app/api/cron/cleanup
+# Currently using Light, want to switch to Balanced
+npm run setup-cron:balanced
 ```
 
-## Managing Cron Jobs
+**What happens:**
+- Existing jobs are updated (not duplicated)
+- Schedules change to match new strategy
+- Jobs are matched by title (e.g., "Sparrow - Process Queue")
 
-### Via API
+---
 
-You can manage cron jobs programmatically using the `/api/cron/manage` endpoint:
+## Monitoring
+
+### Check Job Status
+
+Visit https://console.cron-job.org to:
+- View execution history
+- Check success/failure rates
+- See response times
+- View error messages
+
+### Common Issues
+
+**401 Unauthorized**
+- Check `CRON_SECRET` in `.env.local` matches the URL parameter
+- Verify URL includes `?secret=YOUR_SECRET`
+
+**500 Internal Server Error**
+- Check Vercel deployment logs
+- Verify all environment variables are set in Vercel
+- Check Redis, Prisma, and API integrations
+
+**Job not running**
+- Verify job is enabled in cron-job.org
+- Check schedule is correct
+- Ensure you haven't hit the 100 runs/day limit
+
+---
+
+## Advanced Usage
+
+### Custom Strategy
+
+You can create a custom strategy by modifying `src/lib/cron-job-org.ts`:
+
+```typescript
+case 'custom':
+  return {
+    name: 'Custom',
+    description: 'Your custom strategy',
+    totalRuns: 80,
+    jobs: {
+      processQueue: {
+        enabled: true,
+        schedule: {
+          timezone: 'UTC',
+          hours: [-1],
+          minutes: [0, 15, 30, 45], // Every 15 minutes
+          mdays: [-1],
+          months: [-1],
+          wdays: [-1]
+        }
+      },
+      // ... other jobs
+    }
+  }
+```
+
+Then run:
+```bash
+npx tsx scripts/setup-cron.ts custom
+```
+
+### Delete All Jobs
+
+To remove all cron jobs:
 
 ```bash
-# List all jobs
-curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
-  https://your-app.vercel.app/api/cron/manage
-
-# Delete a specific job
-curl -X DELETE \
-  -H "Authorization: Bearer YOUR_CRON_SECRET" \
-  "https://your-app.vercel.app/api/cron/manage?jobId=123"
+# Via cron-job.org console
+# Or use the management API endpoint
+curl -X DELETE "https://your-app.vercel.app/api/cron/manage?jobId=123&secret=YOUR_SECRET"
 ```
 
-### Via cron-job.org Console
+---
 
-Visit [console.cron-job.org](https://console.cron-job.org) to:
-- View execution history for each job
-- Enable/disable individual jobs
-- Modify schedules without code changes
-- Monitor performance and response times
-- View saved responses and logs
-- Adjust retry settings
+## FAQ
 
-## Rate Limits
+**Q: Can I mix manual and automated strategies?**
+A: Yes! Choose `balanced` or `light`, then manually run the automated jobs when needed.
 
-### Free Tier (Current)
-- **50 triggers per day** (our usage)
-- **100 triggers per day** (limit)
-- **50% utilization** - room for growth
-- Max 1 job creation per second
-- Max 5 requests per second for other operations
+**Q: What if I exceed 100 runs/day?**
+A: Cron-job.org will stop executing jobs until the next day. Monitor your usage in the console.
 
-### If You Need More
-**Sustaining Members (Paid)**
-- 5,000 requests per day
-- Higher rate limits
-- Priority support
+**Q: How do I test a cron job?**
+A: Click "Run now" in cron-job.org, or paste the URL in your browser.
 
-**Ways to Optimize Further:**
-- Reduce publishing frequency (currently hourly)
-- Increase feed processing interval (currently 2 hours)
-- Combine low-frequency tasks if needed
+**Q: Can I use a different cron service?**
+A: Yes! All endpoints support standard GET requests with `?secret=YOUR_SECRET` parameter.
 
-## Troubleshooting
+---
 
-### Setup script fails with "Unauthorized"
-- Verify your `CRON_JOB_ORG_API_KEY` is correct
-- Check the API key hasn't expired
-- Regenerate a new API key if needed at [console.cron-job.org/settings](https://console.cron-job.org/settings)
+## Support
 
-### Cron job not executing
-- Check the job is **enabled** in the cron-job.org console
-- Verify your `NEXT_PUBLIC_APP_URL` is correct and publicly accessible
-- Check your application logs for authentication errors
-- Ensure `CRON_SECRET` matches between your app and cron-job.org URLs
-- Test the endpoint manually with curl
-
-### "Rate limit exceeded" errors
-- You've hit the 100 requests/day limit
-- Check if you have duplicate jobs (delete extras)
-- Wait until the next day (limits reset daily)
-- Consider upgrading to sustaining membership
-- Review which jobs are actually needed
-
-### Authentication failures
-- Verify `CRON_SECRET` is set correctly in Vercel environment variables
-- Check the cron-job.org job URLs include `?secret=YOUR_SECRET`
-- Review application logs for specific error messages
-- Test manually: `curl -H "Authorization: Bearer YOUR_SECRET" YOUR_ENDPOINT`
-
-### Jobs failing with timeouts
-- Check function timeout limits on Vercel (default: 10s, max: 60s on Pro)
-- Review logs to see which task is timing out
-- Consider increasing `requestTimeout` in cron config (currently 60s)
-- Optimize slow database queries or RSS fetches
-
-### Some jobs succeed, others fail
-- Check individual job execution history in cron-job.org console
-- Review application logs for specific endpoints
-- Verify all endpoints are deployed and accessible
-- Test each endpoint manually
-
-## Migration from Single Master Cron
-
-If you previously used a single master cron job:
-
-1. ✅ Code has been updated to support multiple jobs
-2. ✅ API endpoints remain the same and still work individually
-3. ✅ Authentication still uses `CRON_SECRET`
-4. ⚠️ **Delete the old "Master Cron" job** from cron-job.org console
-5. ⚠️ Run `npm run setup-cron` to create the new jobs
-6. ⚠️ Verify all 5 jobs appear and are enabled
-
-**Benefits of Migration:**
-- More frequent publishing (1hr vs 24hr)
-- More frequent feed processing (2hr vs 24hr)
-- Better load distribution
-- Easier to debug individual tasks
-- No single point of failure
-
-## API Endpoints Reference
-
-All endpoints require authentication via `CRON_SECRET`:
-
-| Endpoint | Method | Purpose | Frequency |
-|----------|--------|---------|-----------|
-| `/api/cron/process-feeds` | GET | Process RSS feeds | Every 2 hours |
-| `/api/cron/publish-posts` | GET | Publish scheduled posts | Every hour |
-| `/api/cron/process-queue` | GET | Generate AI posts | Every 2 hours |
-| `/api/cron/refresh-tokens` | GET | Refresh OAuth tokens | Daily |
-| `/api/cron/cleanup` | GET | Database cleanup | Daily |
-| `/api/cron/manage` | GET/DELETE | Manage cron jobs | Manual |
-| `/api/cron/master` | GET | Legacy (all tasks) | Deprecated |
-
-## Additional Resources
-
-- [cron-job.org Documentation](https://docs.cron-job.org/)
-- [REST API Reference](https://docs.cron-job.org/rest-api.html)
-- [Console Dashboard](https://console.cron-job.org)
-- [Account Settings](https://console.cron-job.org/settings)
-- [Job Execution History](https://console.cron-job.org/jobs)
+- Issues: https://github.com/your-repo/issues
+- Documentation: /docs
+- Cron-job.org Docs: https://docs.cron-job.org

@@ -103,14 +103,120 @@ async function publishToLinkedIn(
 }
 
 /**
+ * Process a single scheduled post
+ */
+async function processSinglePost(post: any): Promise<void> {
+  try {
+    // Mark as publishing
+    await prisma.scheduledPost.update({
+      where: { id: post.id },
+      data: { status: "PUBLISHING" },
+    })
+
+    if (!post.socialAccount.isActive) {
+      throw new Error("Social account is not active")
+    }
+
+    // Check if token is expired and refresh if needed
+    let socialAccount = post.socialAccount
+    if (isTokenExpired(socialAccount.tokenExpiresAt)) {
+      console.log(`Token expired for account ${socialAccount.id}, attempting refresh...`)
+      const refreshed = await refreshAccountToken(socialAccount.id)
+
+      if (!refreshed) {
+        throw new Error("Failed to refresh expired token. Please reconnect your account.")
+      }
+
+      // Fetch updated account with new token
+      const updatedAccount = await prisma.socialAccount.findUnique({
+        where: { id: socialAccount.id },
+      })
+
+      if (!updatedAccount) {
+        throw new Error("Account not found after refresh")
+      }
+
+      socialAccount = updatedAccount
+    }
+
+    const accessToken = decrypt(socialAccount.accessToken)
+    let result: PublishResult
+
+    if (post.platform === "TWITTER") {
+      result = await publishToTwitter(accessToken, post.content)
+    } else if (post.platform === "LINKEDIN") {
+      result = await publishToLinkedIn(
+        accessToken,
+        socialAccount.platformUserId,
+        post.content
+      )
+    } else {
+      throw new Error(`Unsupported platform: ${post.platform}`)
+    }
+
+    if (result.success) {
+      // Update post as published
+      await prisma.scheduledPost.update({
+        where: { id: post.id },
+        data: {
+          status: "PUBLISHED",
+          publishedAt: new Date(),
+          platformPostId: result.platformPostId,
+        },
+      })
+
+      // Add to user post history
+      await prisma.userPostHistory.create({
+        data: {
+          userId: post.userId,
+          platform: post.platform,
+          platformPostId: result.platformPostId,
+          content: post.content,
+          mediaUrls: post.mediaUrls,
+          publishedAt: new Date(),
+        },
+      })
+
+      // Update feed status if linked
+      if (post.feedId) {
+        await prisma.feed.update({
+          where: { id: post.feedId },
+          data: { status: "PUBLISHED" },
+        })
+      }
+
+      console.log(`Successfully published post ${post.id} to ${post.platform}`)
+    } else {
+      throw new Error(result.error || "Unknown publishing error")
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+
+    // Update post as failed
+    await prisma.scheduledPost.update({
+      where: { id: post.id },
+      data: {
+        status: "FAILED",
+        errorMessage,
+        retryCount: { increment: 1 },
+      },
+    })
+
+    console.error(`Failed to publish post ${post.id}:`, errorMessage)
+  }
+}
+
+/**
  * Process and publish scheduled posts
+ * Processes posts sequentially, one user at a time to avoid rate limits
  */
 export async function publishScheduledPosts(): Promise<void> {
   console.log("Starting post publishing job...")
 
   const now = new Date()
 
-  // Find posts that are due to be published
+  // Find posts that are due to be published for ONE user at a time
+  // This ensures sequential processing per user to avoid rate limits
   const postsToPublish = await prisma.scheduledPost.findMany({
     where: {
       status: "SCHEDULED",
@@ -122,108 +228,37 @@ export async function publishScheduledPosts(): Promise<void> {
       socialAccount: true,
       user: true,
     },
-    take: 10, // Process in batches
+    orderBy: [
+      { userId: 'asc' },  // Group by user
+      { scheduledFor: 'asc' }  // Then by scheduled time
+    ],
+    take: 10, // Process fewer posts per run since it runs every minute
   })
 
   console.log(`Found ${postsToPublish.length} posts to publish`)
 
-  for (const post of postsToPublish) {
-    // Mark as publishing
-    await prisma.scheduledPost.update({
-      where: { id: post.id },
-      data: { status: "PUBLISHING" },
-    })
+  // Process posts sequentially (one at a time)
+  if (postsToPublish.length > 0) {
+    let currentUserId = null
 
-    try {
-      if (!post.socialAccount.isActive) {
-        throw new Error("Social account is not active")
-      }
-
-      // Check if token is expired and refresh if needed
-      if (isTokenExpired(post.socialAccount.tokenExpiresAt)) {
-        console.log(`Token expired for account ${post.socialAccount.id}, attempting refresh...`)
-        const refreshed = await refreshAccountToken(post.socialAccount.id)
-
-        if (!refreshed) {
-          throw new Error("Failed to refresh expired token. Please reconnect your account.")
+    for (const post of postsToPublish) {
+      // Log when switching to a new user
+      if (currentUserId !== post.userId) {
+        if (currentUserId !== null) {
+          console.log(`Completed posts for user ${currentUserId}`)
         }
-
-        // Fetch updated account with new token
-        const updatedAccount = await prisma.socialAccount.findUnique({
-          where: { id: post.socialAccount.id },
-        })
-
-        if (!updatedAccount) {
-          throw new Error("Account not found after refresh")
-        }
-
-        post.socialAccount = updatedAccount
+        currentUserId = post.userId
+        console.log(`Processing posts for user ${currentUserId}`)
       }
 
-      const accessToken = decrypt(post.socialAccount.accessToken)
-      let result: PublishResult
+      await processSinglePost(post)
 
-      if (post.platform === "TWITTER") {
-        result = await publishToTwitter(accessToken, post.content)
-      } else if (post.platform === "LINKEDIN") {
-        result = await publishToLinkedIn(
-          accessToken,
-          post.socialAccount.platformUserId,
-          post.content
-        )
-      } else {
-        throw new Error(`Unsupported platform: ${post.platform}`)
-      }
+      // Small delay between posts to avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
 
-      if (result.success) {
-        // Update post as published
-        await prisma.scheduledPost.update({
-          where: { id: post.id },
-          data: {
-            status: "PUBLISHED",
-            publishedAt: new Date(),
-            platformPostId: result.platformPostId,
-          },
-        })
-
-        // Add to user post history
-        await prisma.userPostHistory.create({
-          data: {
-            userId: post.userId,
-            platform: post.platform,
-            platformPostId: result.platformPostId,
-            content: post.content,
-            mediaUrls: post.mediaUrls,
-            publishedAt: new Date(),
-          },
-        })
-
-        // Update feed status if linked
-        if (post.feedId) {
-          await prisma.feed.update({
-            where: { id: post.feedId },
-            data: { status: "PUBLISHED" },
-          })
-        }
-
-        console.log(`Successfully published post ${post.id} to ${post.platform}`)
-      } else {
-        throw new Error(result.error || "Unknown publishing error")
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error"
-
-      // Update post as failed
-      await prisma.scheduledPost.update({
-        where: { id: post.id },
-        data: {
-          status: "FAILED",
-          errorMessage,
-          retryCount: { increment: 1 },
-        },
-      })
-
-      console.error(`Failed to publish post ${post.id}:`, errorMessage)
+    if (currentUserId !== null) {
+      console.log(`Completed posts for user ${currentUserId}`)
     }
   }
 

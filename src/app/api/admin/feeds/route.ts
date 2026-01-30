@@ -35,10 +35,6 @@ export async function GET(request: Request) {
     const [feeds, total] = await Promise.all([
       prisma.feed.findMany({
         where: whereClause,
-        include: {
-          topic: true,
-          rssFeed: true,
-        },
         select: {
           id: true,
           title: true,

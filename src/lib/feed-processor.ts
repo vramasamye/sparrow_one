@@ -3,6 +3,7 @@ import { prisma } from "./prisma"
 import { parseFeed, type ParsedFeedItem } from "./rss-parser"
 import { scoreFeed } from "./feed-scorer"
 import { enqueueApprovedFeed } from "./queue"
+import { redis } from "@/lib/redis"
 
 export interface ProcessingResult {
   feedId: string
@@ -139,18 +140,26 @@ export async function processSingleFeed(
 
     // Parse the feed
     const items = await parseFeed(feedUrl)
+    const newFeedIds: string[] = []
 
     // Process each item
     for (const item of items) {
-      const status = await addFeedItem(topicId, feedId, item, feed?.lastSuccessAt)
+      const { status, feedId: newFeedId } = await addFeedItem(topicId, feedId, item, feed?.lastSuccessAt)
 
       if (status === 'added') {
         result.newItems++
+        if (newFeedId) newFeedIds.push(newFeedId)
       } else if (status === 'duplicate') {
         result.duplicates++
       } else if (status === 'skipped') {
         result.skipped++
       }
+    }
+
+    // Score new items in parallel
+    if (newFeedIds.length > 0) {
+      console.log(`Scoring ${newFeedIds.length} new items from ${feedName}...`)
+      await Promise.allSettled(newFeedIds.map(id => scoreFeed(id)))
     }
 
     // Update feed last fetched timestamp
@@ -185,7 +194,7 @@ export async function processSingleFeed(
 
 /**
  * Add a feed item if it doesn't already exist
- * Returns: 'added' | 'duplicate' | 'skipped'
+ * Returns: { status: 'added' | 'duplicate' | 'skipped', feedId?: string }
  *
  * Time-based filtering:
  * - First pull (lastSuccessAt is null): Get all January 2026 articles
@@ -196,12 +205,12 @@ async function addFeedItem(
   rssFeedId: string,
   item: ParsedFeedItem,
   lastSuccessAt: Date | null | undefined
-): Promise<'added' | 'duplicate' | 'skipped'> {
+): Promise<{ status: 'added' | 'duplicate' | 'skipped'; feedId?: string }> {
   try {
     // SKIP if no publishedAt date
     if (!item.publishedAt) {
       console.log(`⏭️  Skipping item (no publishedAt): "${item.title.substring(0, 50)}..."`)
-      return 'skipped'
+      return { status: 'skipped' }
     }
 
     const itemDate = new Date(item.publishedAt)
@@ -213,13 +222,13 @@ async function addFeedItem(
 
       if (itemDate < thirtyDaysAgo) {
         console.log(`⏭️  Skipping item (first pull - older than 30 days): "${item.title.substring(0, 50)}..."`)
-        return 'skipped'
+        return { status: 'skipped' }
       }
     } else {
       // SUBSEQUENT PULLS: Only get items published after last successful fetch
       if (itemDate <= lastSuccessAt) {
         console.log(`⏭️  Skipping item (already fetched): "${item.title.substring(0, 50)}..."`)
-        return 'skipped'
+        return { status: 'skipped' }
       }
     }
 
@@ -229,7 +238,7 @@ async function addFeedItem(
     })
 
     if (existing) {
-      return 'duplicate'
+      return { status: 'duplicate' }
     }
 
     // Ensure author is a string (some feeds return objects)
@@ -248,7 +257,7 @@ async function addFeedItem(
     }
 
     // Create new feed item
-    await prisma.feed.create({
+    const newFeed = await prisma.feed.create({
       data: {
         topicId,
         rssFeedId,
@@ -264,14 +273,14 @@ async function addFeedItem(
       },
     })
 
-    return 'added'
+    return { status: 'added', feedId: newFeed.id }
   } catch (error) {
     // Handle unique constraint violation (race condition)
     if (
       error instanceof Error &&
       error.message.includes("Unique constraint failed")
     ) {
-      return 'duplicate'
+      return { status: 'duplicate' }
     }
     throw error
   }
@@ -279,8 +288,17 @@ async function addFeedItem(
 
 /**
  * Get processing statistics (non-cached version for API routes)
+ * Now with Redis caching for performance
  */
 export async function getProcessingStatsUncached() {
+  const CACHE_KEY = "feed:processing:stats"
+  
+  // Try cache first
+  const cached = await redis.get(CACHE_KEY)
+  if (cached) {
+    return JSON.parse(cached)
+  }
+
   const [pendingCount, approvedCount, rejectedCount, publishedCount, feedCount] =
     await Promise.all([
       prisma.feed.count({ where: { status: "PENDING" } }),
@@ -290,13 +308,18 @@ export async function getProcessingStatsUncached() {
       prisma.rssFeed.count({ where: { isActive: true } }),
     ])
 
-  return {
+  const stats = {
     pending: pendingCount,
     approved: approvedCount,
     rejected: rejectedCount,
     published: publishedCount,
     activeFeeds: feedCount,
   }
+
+  // Cache for 60 seconds
+  await redis.set(CACHE_KEY, JSON.stringify(stats), "EX", 60)
+
+  return stats
 }
 
 /**

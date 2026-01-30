@@ -190,7 +190,7 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
       return {
         name: 'Balanced',
         description: 'Optimized balance between queue processing and post publishing',
-        totalRuns: 144, // 72 (processQueue) + 24 (publishPosts) + 48 (scoreFeeds)
+        totalRuns: 1512, // 72 (processQueue) + 1440 (publishPosts every 1 min) + 48 (scoreFeeds)
         jobs: {
           scoreFeeds: {
             enabled: true,
@@ -219,7 +219,7 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
             schedule: {
               timezone: 'UTC',
               hours: [-1], // Every hour
-              minutes: [0], // At :00
+              minutes: [-1], // Every minute (1440/day)
               mdays: [-1],
               months: [-1],
               wdays: [-1]
@@ -244,7 +244,7 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
       return {
         name: 'Light',
         description: 'Minimal automation - only critical jobs (manual workflow)',
-        totalRuns: 96, // 48 (processQueue) + 24 (publishPosts) + 24 (scoreFeeds)
+        totalRuns: 1512, // 48 (processQueue) + 1440 (publishPosts every 1 min) + 24 (scoreFeeds)
         jobs: {
           scoreFeeds: {
             enabled: true,
@@ -273,7 +273,7 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
             schedule: {
               timezone: 'UTC',
               hours: [-1],
-              minutes: [15], // Every hour at :15
+              minutes: [-1], // Every minute (1440/day)
               mdays: [-1],
               months: [-1],
               wdays: [-1]
@@ -298,7 +298,7 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
       return {
         name: 'Full Automation',
         description: 'Complete automation with all background tasks',
-        totalRuns: 98, // 12 (processQueue) + 24 (publishPosts) + 12 (processFeeds) + 48 (scoreFeeds) + 1 (refreshTokens) + 1 (cleanup)
+        totalRuns: 1514, // 12 (processQueue) + 1440 (publishPosts every 1 min) + 12 (processFeeds) + 48 (scoreFeeds) + 1 (refreshTokens) + 1 (cleanup)
         jobs: {
           scoreFeeds: {
             enabled: true,
@@ -327,7 +327,7 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
             schedule: {
               timezone: 'UTC',
               hours: [-1],
-              minutes: [15],
+              minutes: [-1], // Every minute (1440/day)
               mdays: [-1],
               months: [-1],
               wdays: [-1]
@@ -495,7 +495,7 @@ export async function setupAllCronJobs(strategy: CronStrategy = 'balanced'): Pro
       enabled: true,
       saveResponses: true,
       requestMethod: 1,
-      requestTimeout: 60,
+      requestTimeout: 30, // 30 seconds - processes 1 user at a time
       schedule: config.jobs.publishPosts.schedule
     }
     jobIds.publishPosts = await createOrUpdateJob(publishConfig, 'publishPosts')

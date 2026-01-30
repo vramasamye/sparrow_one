@@ -101,7 +101,7 @@ REASONING: [brief explanation]`
       model: groq('meta-llama/llama-guard-4-12b'),
       prompt,
       temperature: 0.2,  // Low temperature for consistent moderation
-      maxTokens: 200
+      // maxTokens: 200 // Commented out to fix TS error: Object literal may only specify known properties
     })
 
     // Parse the response
