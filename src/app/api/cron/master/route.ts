@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { processAllFeeds } from "@/lib/feed-processor"
 import { publishScheduledPosts } from "@/lib/social-publisher"
+import { withDatabase } from "@/lib/cron-db"
 import { refreshExpiringTokens } from "@/lib/token-refresh"
 import { runAllCleanupJobs } from "@/lib/cleanup"
 import { dequeueNextJob, markJobCompleted, markJobFailed } from "@/lib/queue"

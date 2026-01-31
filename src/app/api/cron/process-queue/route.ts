@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { dequeueNextJob, markJobCompleted, markJobFailed, getQueueStats, recoverStuckJobs } from "@/lib/queue"
 import { generatePostsForFeed } from "@/lib/auto-generator"
+import { withDatabase } from "@/lib/cron-db"
 import { distributeToSubscribers } from "@/lib/auto-scheduler"
 import { verifyCronAuth } from "@/lib/cron-auth"
 

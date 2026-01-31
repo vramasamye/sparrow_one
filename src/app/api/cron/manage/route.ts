@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { CronJobOrgService } from "@/lib/cron-job-org"
 import { verifyCronAuth } from "@/lib/cron-auth"
+import { withDatabase } from "@/lib/cron-db"
 
 /**
  * Manage cron-job.org jobs

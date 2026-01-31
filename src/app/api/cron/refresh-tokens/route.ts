@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { refreshExpiringTokens } from "@/lib/token-refresh"
+import { withDatabase } from "@/lib/cron-db"
 import { verifyCronAuth } from "@/lib/cron-auth"
 
 /**

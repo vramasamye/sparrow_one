@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { runAllCleanupJobs } from "@/lib/cleanup"
 import { verifyCronAuth } from "@/lib/cron-auth"
+import { withDatabase } from "@/lib/cron-db"
 
 /**
  * Database Cleanup Cron Job
@@ -24,10 +25,12 @@ export async function GET(request: NextRequest) {
   try {
     console.log("Cleanup cron job started")
 
-    const results = await runAllCleanupJobs()
-
-    const totalDeleted = results.reduce((sum, r) => sum + r.deletedCount, 0)
-    const errors = results.filter((r) => r.error)
+    const { results, totalDeleted, errors } = await withDatabase(async () => {
+      const results = await runAllCleanupJobs()
+      const totalDeleted = results.reduce((sum, r) => sum + r.deletedCount, 0)
+      const errors = results.filter((r) => r.error)
+      return { results, totalDeleted, errors }
+    })
 
     return NextResponse.json({
       success: errors.length === 0,

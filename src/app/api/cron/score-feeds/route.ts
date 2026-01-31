@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { scoreUnscoredFeeds } from "@/lib/batch-scorer"
 import { verifyCronAuth } from "@/lib/cron-auth"
+import { withDatabase } from "@/lib/cron-db"
 
 /**
  * Feed Scoring Cron Job
@@ -26,7 +27,9 @@ export async function GET(request: NextRequest) {
 
   try {
     // Score up to 60 feeds per run (safe for 30 RPM limit)
-    const result = await scoreUnscoredFeeds(60)
+    const result = await withDatabase(async () => {
+      return await scoreUnscoredFeeds(60)
+    })
 
     const duration = Date.now() - startTime
 
