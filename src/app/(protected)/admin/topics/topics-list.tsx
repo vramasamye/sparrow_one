@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Plus, Trash2, ToggleLeft, ToggleRight, Rss, ExternalLink } from "lucide-react"
 import { toast } from "sonner"
+import { useQueryClient } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import {
   useAdminTopics,
   useCreateTopic,
@@ -38,6 +40,8 @@ interface Topic {
   name: string
   slug: string
   description: string | null
+  enableTwitter: boolean
+  enableLinkedin: boolean
   rssFeeds: RSSFeed[]
   _count: {
     rssFeeds: number
@@ -54,6 +58,7 @@ export function TopicsList() {
   const [newFeed, setNewFeed] = useState({ name: "", url: "" })
 
   // React Query hooks
+  const queryClient = useQueryClient()
   const { data: topics = [], isLoading: loading } = useAdminTopics()
   const createTopicMutation = useCreateTopic()
   const deleteTopicMutation = useDeleteTopic()
@@ -104,6 +109,35 @@ export function TopicsList() {
   const handleDeleteFeed = async (feedId: string) => {
     if (!confirm("Are you sure you want to delete this RSS feed?")) return
     await deleteFeedMutation.mutateAsync(feedId)
+  }
+
+  const handleTogglePlatform = async (
+    topicId: string,
+    platform: 'twitter' | 'linkedin',
+    enabled: boolean
+  ) => {
+    try {
+      const response = await fetch(`/api/admin/topics/${topicId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          [platform === 'twitter' ? 'enableTwitter' : 'enableLinkedin']: enabled
+        })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to update platform')
+      }
+
+      toast.success(
+        `${platform === 'twitter' ? 'Twitter' : 'LinkedIn'} ${enabled ? 'enabled' : 'disabled'}`
+      )
+
+      queryClient.invalidateQueries({ queryKey: ['admin-topics'] })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update')
+    }
   }
 
   if (loading) {
@@ -175,7 +209,7 @@ export function TopicsList() {
           {topics.map((topic) => (
             <div key={topic.id} className="border rounded-lg p-6">
               <div className="flex justify-between items-start mb-4">
-                <div>
+                <div className="flex-1">
                   <h3 className="text-xl font-semibold">{topic.name}</h3>
                   {topic.description && (
                     <p className="text-sm text-muted-foreground mt-1">
@@ -185,6 +219,34 @@ export function TopicsList() {
                   <p className="text-xs text-muted-foreground mt-2">
                     {topic._count.rssFeeds} RSS feeds • {topic._count.feeds} articles
                   </p>
+
+                  {/* Platform toggles */}
+                  <div className="flex gap-4 mt-3 pb-3 border-b">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`twitter-${topic.id}`} className="text-sm cursor-pointer">
+                        🐦 Twitter
+                      </Label>
+                      <Switch
+                        id={`twitter-${topic.id}`}
+                        checked={topic.enableTwitter ?? true}
+                        onCheckedChange={(checked) =>
+                          handleTogglePlatform(topic.id, 'twitter', checked)
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`linkedin-${topic.id}`} className="text-sm cursor-pointer">
+                        💼 LinkedIn
+                      </Label>
+                      <Switch
+                        id={`linkedin-${topic.id}`}
+                        checked={topic.enableLinkedin ?? true}
+                        onCheckedChange={(checked) =>
+                          handleTogglePlatform(topic.id, 'linkedin', checked)
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Dialog

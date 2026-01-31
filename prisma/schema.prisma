@@ -153,6 +153,11 @@ model Topic {
   description String?
   icon        String?
   isActive    Boolean  @default(true)
+
+  // Platform configuration
+  enableTwitter  Boolean  @default(true)
+  enableLinkedin Boolean  @default(true)
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -272,8 +277,8 @@ enum FeedStatus {
 model GeneratedPost {
   id              String              @id @default(cuid())
   feedId          String
-  twitterContent  String              @db.Text
-  linkedinContent String              @db.Text
+  twitterContent  String?             @db.Text
+  linkedinContent String?             @db.Text
   status          GeneratedPostStatus @default(PENDING)
   generatedAt     DateTime            @default(now())
   distributedAt   DateTime?           // When posts were distributed to users

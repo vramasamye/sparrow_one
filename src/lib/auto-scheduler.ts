@@ -193,11 +193,18 @@ async function distributeLegacy(feedId: string): Promise<{
   let linkedinScheduled = 0
 
   try {
-    // 1. Get the feed and generated content
+    // 1. Get the feed and generated content with topic platform config
     const feed = await prisma.feed.findUnique({
       where: { id: feedId },
       include: {
-        topic: true,
+        topic: {
+          select: {
+            id: true,
+            name: true,
+            enableTwitter: true,
+            enableLinkedin: true,
+          }
+        },
         generatedPosts: true
       }
     })
@@ -237,6 +244,7 @@ async function distributeLegacy(feedId: string): Promise<{
     }
 
     console.log(`📢 Distributing to ${subscribers.length} subscribers...`)
+    console.log(`   Platforms: ${feed.topic.enableTwitter ? '🐦 Twitter' : ''} ${feed.topic.enableLinkedin ? '💼 LinkedIn' : ''}`)
 
     // 3. Update status to DISTRIBUTING
     await prisma.generatedPost.update({
@@ -253,8 +261,8 @@ async function distributeLegacy(feedId: string): Promise<{
       const twitterAccount = user.socialAccounts.find(sa => sa.platform === "TWITTER")
       const linkedinAccount = user.socialAccounts.find(sa => sa.platform === "LINKEDIN")
 
-      // Schedule Twitter post if user has Twitter connected
-      if (twitterAccount) {
+      // Schedule Twitter post if enabled for topic and user has Twitter connected
+      if (feed.topic.enableTwitter && twitterAccount && generatedPost.twitterContent) {
         try {
           const scheduledFor = await getNextPostingSlot(user.id, "TWITTER")
 
@@ -278,10 +286,12 @@ async function distributeLegacy(feedId: string): Promise<{
           errors.push(msg)
           console.error(`  ❌ ${msg}`)
         }
+      } else if (!feed.topic.enableTwitter && twitterAccount) {
+        console.log(`  ⏭️  Skipping Twitter for ${user.email} (topic disabled)`)
       }
 
-      // Schedule LinkedIn post if user has LinkedIn connected
-      if (linkedinAccount) {
+      // Schedule LinkedIn post if enabled for topic and user has LinkedIn connected
+      if (feed.topic.enableLinkedin && linkedinAccount && generatedPost.linkedinContent) {
         try {
           const scheduledFor = await getNextPostingSlot(user.id, "LINKEDIN")
 
@@ -305,6 +315,8 @@ async function distributeLegacy(feedId: string): Promise<{
           errors.push(msg)
           console.error(`  ❌ ${msg}`)
         }
+      } else if (!feed.topic.enableLinkedin && linkedinAccount) {
+        console.log(`  ⏭️  Skipping LinkedIn for ${user.email} (topic disabled)`)
       }
 
       if (userHasPosts) {

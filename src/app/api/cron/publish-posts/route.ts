@@ -38,9 +38,13 @@ export async function GET(request: NextRequest) {
         console.warn(`Attempt ${attempt}/3 failed:`, lastError.message)
 
         // If it's a connection error and we have retries left, wait and retry
-        if (attempt < 3 && lastError.message.includes("Can't reach database")) {
-          console.log(`Waiting 2 seconds before retry ${attempt + 1}...`)
-          await new Promise(resolve => setTimeout(resolve, 2000))
+        if (attempt < 3 && (
+          lastError.message.includes("Can't reach database") ||
+          lastError.message.includes("Engine is not yet connected") ||
+          lastError.message.includes("Database connection failed")
+        )) {
+          console.log(`Waiting 3 seconds before retry ${attempt + 1}...`)
+          await new Promise(resolve => setTimeout(resolve, 3000))
         } else if (attempt < 3) {
           // For non-connection errors, retry faster
           await new Promise(resolve => setTimeout(resolve, 500))

@@ -12,10 +12,19 @@ export async function generatePostsForFeed(feedId: string): Promise<{
   error?: string
 }> {
   try {
-    // 1. Get the feed
+    // 1. Get the feed with topic platform config
     const feed = await prisma.feed.findUnique({
       where: { id: feedId },
-      include: { topic: true }
+      include: {
+        topic: {
+          select: {
+            id: true,
+            name: true,
+            enableTwitter: true,
+            enableLinkedin: true,
+          }
+        }
+      }
     })
 
     if (!feed) {
@@ -26,7 +35,12 @@ export async function generatePostsForFeed(feedId: string): Promise<{
       throw new Error(`Feed ${feedId} is not approved (status: ${feed.status})`)
     }
 
-    // 2. Check if already generated
+    // 2. Validate at least one platform enabled
+    if (!feed.topic.enableTwitter && !feed.topic.enableLinkedin) {
+      throw new Error(`Topic ${feed.topic.name} has no platforms enabled`)
+    }
+
+    // 3. Check if already generated
     const existing = await prisma.generatedPost.findUnique({
       where: { feedId }
     })
@@ -35,18 +49,18 @@ export async function generatePostsForFeed(feedId: string): Promise<{
       console.log(`✅ Feed ${feedId} already has generated content`)
       return {
         success: true,
-        twitterContent: existing.twitterContent,
-        linkedinContent: existing.linkedinContent
+        twitterContent: existing.twitterContent ?? undefined,
+        linkedinContent: existing.linkedinContent ?? undefined
       }
     }
 
-    // 3. Create or update GeneratedPost record (status: GENERATING)
+    // 4. Create or update GeneratedPost record (status: GENERATING)
     await prisma.generatedPost.upsert({
       where: { feedId },
       create: {
         feedId,
-        twitterContent: "",
-        linkedinContent: "",
+        twitterContent: null,
+        linkedinContent: null,
         status: "GENERATING"
       },
       update: {
@@ -57,31 +71,39 @@ export async function generatePostsForFeed(feedId: string): Promise<{
 
     console.log(`🤖 Generating posts for: "${feed.title.substring(0, 60)}..."`)
 
-    // 4. Generate Twitter post (with rate limit retry)
-    console.log("  📱 Generating Twitter post...")
-    const twitterContent = await generatePost({
-      title: feed.title,
-      summary: feed.summary || "",
-      url: feed.url,
-      platform: "twitter",
-      waitForRateLimit: true // ← Wait up to 10 minutes if rate limited
-    })
+    // 5. Conditionally generate Twitter post
+    let twitterContent: string | null = null
+    if (feed.topic.enableTwitter) {
+      console.log("  📱 Generating Twitter post...")
+      twitterContent = await generatePost({
+        title: feed.title,
+        summary: feed.summary || "",
+        url: feed.url,
+        platform: "twitter",
+        waitForRateLimit: true // ← Wait up to 10 minutes if rate limited
+      })
+      console.log("  ✅ Twitter post generated")
+    } else {
+      console.log("  ⏭️  Skipping Twitter (disabled for this topic)")
+    }
 
-    console.log("  ✅ Twitter post generated")
+    // 6. Conditionally generate LinkedIn post
+    let linkedinContent: string | null = null
+    if (feed.topic.enableLinkedin) {
+      console.log("  💼 Generating LinkedIn post...")
+      linkedinContent = await generatePost({
+        title: feed.title,
+        summary: feed.summary || "",
+        url: feed.url,
+        platform: "linkedin",
+        waitForRateLimit: true // ← Wait up to 10 minutes if rate limited
+      })
+      console.log("  ✅ LinkedIn post generated")
+    } else {
+      console.log("  ⏭️  Skipping LinkedIn (disabled for this topic)")
+    }
 
-    // 5. Generate LinkedIn post (with rate limit retry)
-    console.log("  💼 Generating LinkedIn post...")
-    const linkedinContent = await generatePost({
-      title: feed.title,
-      summary: feed.summary || "",
-      url: feed.url,
-      platform: "linkedin",
-      waitForRateLimit: true // ← Wait up to 10 minutes if rate limited
-    })
-
-    console.log("  ✅ LinkedIn post generated")
-
-    // 6. Store generated content
+    // 7. Store generated content (null for disabled platforms)
     await prisma.generatedPost.update({
       where: { feedId },
       data: {
@@ -96,8 +118,8 @@ export async function generatePostsForFeed(feedId: string): Promise<{
 
     return {
       success: true,
-      twitterContent,
-      linkedinContent
+      twitterContent: twitterContent ?? undefined,
+      linkedinContent: linkedinContent ?? undefined
     }
 
   } catch (error) {
@@ -119,8 +141,8 @@ export async function generatePostsForFeed(feedId: string): Promise<{
         where: { feedId },
         create: {
           feedId,
-          twitterContent: "",
-          linkedinContent: "",
+          twitterContent: null,
+          linkedinContent: null,
           status: "FAILED",
           errorMessage
         },

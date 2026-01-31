@@ -213,6 +213,16 @@ async function processSinglePost(post: any): Promise<void> {
 export async function publishScheduledPosts(): Promise<void> {
   console.log("Starting post publishing job...")
 
+  // CRITICAL: Explicitly connect Prisma in serverless environments (Vercel)
+  // This ensures the engine is ready before making queries
+  try {
+    await prisma.$connect()
+    console.log("Prisma connected successfully")
+  } catch (error) {
+    console.error("Failed to connect Prisma:", error)
+    throw new Error("Database connection failed")
+  }
+
   const now = new Date()
 
   // Find posts that are due to be published for ONE user at a time
@@ -263,4 +273,7 @@ export async function publishScheduledPosts(): Promise<void> {
   }
 
   console.log("Post publishing job completed")
+
+  // Disconnect Prisma in serverless environments to free resources
+  await prisma.$disconnect()
 }
