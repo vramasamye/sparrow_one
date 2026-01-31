@@ -48,7 +48,6 @@ const SOURCE_AUTHORITY: Record<string, number> = {
 
   // Tier 3: Industry Publications (16 points)
   'siliconangle.com': 16,
-  'venturebeat.com': 16,
   'zdnet.com': 16,
   'computerworld.com': 16,
 
