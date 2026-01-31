@@ -19,7 +19,13 @@ const OPTIMAL_TIMES = {
 }
 
 /**
+ * Maximum posts per day per platform (strict limit)
+ */
+const MAX_POSTS_PER_DAY = 6
+
+/**
  * Get the next available posting slot for a user on a platform
+ * Ensures no scheduling conflicts and enforces strict 6 posts per day limit
  */
 async function getNextPostingSlot(
   userId: string,
@@ -30,38 +36,123 @@ async function getNextPostingSlot(
   const platformKey = platform.toLowerCase() as "twitter" | "linkedin"
   const optimalTimes = OPTIMAL_TIMES[platformKey]
 
-  // Get today's scheduled posts for this user and platform
-  const todaysPosts = await prisma.scheduledPost.findMany({
-    where: {
-      userId,
-      platform,
-      scheduledFor: {
-        gte: today,
-        lt: addHours(today, 24),
+  // Try to find an available slot, checking multiple days if needed
+  for (let daysAhead = 0; daysAhead < 14; daysAhead++) {
+    const targetDay = addHours(today, daysAhead * 24)
+    const dayEnd = addHours(targetDay, 24)
+
+    // Get existing scheduled posts for this specific day only
+    const existingPosts = await prisma.scheduledPost.findMany({
+      where: {
+        userId,
+        platform,
+        scheduledFor: {
+          gte: targetDay,
+          lt: dayEnd, // Critical: only posts within this 24-hour period
+        },
+        status: { in: ["SCHEDULED", "PUBLISHING"] },
       },
-      status: { in: ["SCHEDULED", "PUBLISHING"] },
-    },
-    select: { scheduledFor: true },
-  })
+      select: { scheduledFor: true },
+    })
 
-  const scheduledHours = new Set(
-    todaysPosts.map((p) => new Date(p.scheduledFor).getUTCHours())
-  )
+    // Enforce strict per-day limit
+    if (existingPosts.length >= MAX_POSTS_PER_DAY) {
+      continue // This day is full, try next day
+    }
 
-  // Find the next available optimal time today
-  for (const hour of optimalTimes) {
-    if (!scheduledHours.has(hour)) {
-      const slotTime = setMinutes(setHours(today, hour), 0)
-      if (slotTime > now) {
-        return slotTime
+    // Build set of hours already taken on this specific day
+    const scheduledHours = new Set(
+      existingPosts.map((p) => new Date(p.scheduledFor).getUTCHours())
+    )
+
+    // Find next available optimal time for this day
+    for (const hour of optimalTimes) {
+      if (!scheduledHours.has(hour)) {
+        const slotTime = setMinutes(setHours(targetDay, hour), 0)
+        // Only return if slot is in the future
+        if (slotTime > now) {
+          return slotTime
+        }
       }
     }
   }
 
-  // If all today's slots are taken, find first slot tomorrow
-  const tomorrow = addHours(today, 24)
-  const tomorrowsFirstSlot = setMinutes(setHours(tomorrow, optimalTimes[0]), 0)
-  return tomorrowsFirstSlot
+  // Fallback: if no slot found in 14 days, schedule 15 days out
+  const fallbackDay = addHours(today, 15 * 24)
+  return setMinutes(setHours(fallbackDay, optimalTimes[0]), 0)
+}
+
+/**
+ * Safely schedule a post with transaction protection against race conditions
+ * Re-validates the slot availability within a transaction before inserting
+ */
+async function safelySchedulePost(
+  userId: string,
+  socialAccountId: string,
+  feedId: string,
+  platform: "TWITTER" | "LINKEDIN",
+  content: string,
+  scheduledFor: Date
+): Promise<{ success: boolean; postId?: string; error?: string }> {
+  try {
+    // Use transaction with isolation to prevent race conditions
+    const post = await prisma.$transaction(async (tx) => {
+      const dayStart = startOfDay(scheduledFor)
+      const dayEnd = addHours(dayStart, 24)
+
+      // Re-check the count within transaction to prevent race conditions
+      const existingCount = await tx.scheduledPost.count({
+        where: {
+          userId,
+          platform,
+          scheduledFor: {
+            gte: dayStart,
+            lt: dayEnd,
+          },
+          status: { in: ["SCHEDULED", "PUBLISHING"] },
+        },
+      })
+
+      // Enforce strict limit within transaction
+      if (existingCount >= MAX_POSTS_PER_DAY) {
+        throw new Error(`Daily limit of ${MAX_POSTS_PER_DAY} posts already reached for ${platform}`)
+      }
+
+      // Check if exact time slot is already taken
+      const existingAtTime = await tx.scheduledPost.findFirst({
+        where: {
+          userId,
+          platform,
+          scheduledFor,
+          status: { in: ["SCHEDULED", "PUBLISHING"] },
+        },
+      })
+
+      if (existingAtTime) {
+        throw new Error(`Time slot ${scheduledFor.toISOString()} already taken`)
+      }
+
+      // Safe to insert
+      return await tx.scheduledPost.create({
+        data: {
+          userId,
+          socialAccountId,
+          feedId,
+          platform,
+          content,
+          scheduledFor,
+          status: "SCHEDULED",
+        },
+      })
+    })
+
+    return { success: true, postId: post.id }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -101,24 +192,28 @@ export async function POST(request: NextRequest) {
       scheduleTime = await getNextPostingSlot(session.user.id, platformEnum)
     }
 
-    // Create the scheduled post
-    const post = await prisma.scheduledPost.create({
-      data: {
-        userId: session.user.id,
-        socialAccountId: socialAccount.id,
-        feedId,
-        platform: platformEnum,
-        content,
-        scheduledFor: scheduleTime,
-        status: "SCHEDULED",
-      },
-    })
+    // Create the scheduled post with transaction protection
+    const result = await safelySchedulePost(
+      session.user.id,
+      socialAccount.id,
+      feedId,
+      platformEnum,
+      content,
+      scheduleTime
+    )
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error || "Failed to schedule post" },
+        { status: 400 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
       post: {
-        id: post.id,
-        scheduledFor: post.scheduledFor,
+        id: result.postId,
+        scheduledFor: scheduleTime,
       },
     })
   } catch (error) {

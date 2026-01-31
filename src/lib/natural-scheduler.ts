@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { addDays, addHours, setHours, setMinutes, startOfDay, format, getDay } from "date-fns"
+import { addDays, addHours, setHours, setMinutes, startOfDay, format, getDay, startOfWeek as dateStartOfWeek } from "date-fns"
 import { toZonedTime, fromZonedTime } from "date-fns-tz"
 
 /**
@@ -14,6 +14,11 @@ const DEFAULT_PREFERENCES = {
   quietStart: null,
   quietEnd: null,
 }
+
+/**
+ * Maximum posts per day per platform (strict limit)
+ */
+const MAX_POSTS_PER_DAY = 6
 
 /**
  * Get user's scheduling preferences
@@ -108,8 +113,9 @@ export async function getNextNaturalSlot(
 ): Promise<Date> {
   const preferences = await getUserPreferences(userId)
   const platformKey = platform.toLowerCase() as "twitter" | "linkedin"
-  const preferredTimes =
-    platformKey === "twitter" ? preferences.twitterTimes : preferences.linkedinTimes
+  const preferredTimes: number[] = (platformKey === "twitter"
+    ? preferences.twitterTimes
+    : preferences.linkedinTimes) as number[]
 
   // Get current time in user's timezone
   const now = new Date()
@@ -155,8 +161,14 @@ export async function getNextNaturalSlot(
     const currentHour = daysAhead === 0 ? userNow.getHours() : 0
 
     // Check if this is an active day
-    if (!isActiveDay(candidateDay, preferences.activeDays)) {
+    if (!isActiveDay(candidateDay, preferences.activeDays as number[])) {
       continue
+    }
+
+    // Enforce strict per-day limit (6 posts maximum per day per platform)
+    const postsOnThisDay = scheduledSlots.get(dateKey)?.size || 0
+    if (postsOnThisDay >= MAX_POSTS_PER_DAY) {
+      continue // This day is full, try next day
     }
 
     // Try each preferred time slot
@@ -188,6 +200,92 @@ export async function getNextNaturalSlot(
   const fallbackDay = addDays(todayInUserTz, 14)
   const fallbackSlot = setMinutes(setHours(fallbackDay, preferredTimes[0]), 0)
   return fromZonedTime(fallbackSlot, preferences.timezone)
+}
+
+/**
+ * Safely schedule a post with transaction protection against race conditions
+ * Re-validates the slot availability within a transaction before inserting
+ */
+async function safelySchedulePost(
+  userId: string,
+  socialAccountId: string,
+  feedId: string,
+  platform: "TWITTER" | "LINKEDIN",
+  content: string,
+  scheduledFor: Date,
+  timezone: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Use transaction with isolation to prevent race conditions
+    await prisma.$transaction(async (tx) => {
+      // Convert to user's timezone for day boundary check
+      const scheduledInUserTz = toZonedTime(scheduledFor, timezone)
+      const dayStartInUserTz = startOfDay(scheduledInUserTz)
+      const dayEndInUserTz = addDays(dayStartInUserTz, 1)
+
+      // Convert back to UTC for database query
+      const dayStartUTC = fromZonedTime(dayStartInUserTz, timezone)
+      const dayEndUTC = fromZonedTime(dayEndInUserTz, timezone)
+
+      // Re-check the count within transaction to prevent race conditions
+      const existingCount = await tx.scheduledPost.count({
+        where: {
+          userId,
+          platform,
+          scheduledFor: {
+            gte: dayStartUTC,
+            lt: dayEndUTC,
+          },
+          status: { in: ["SCHEDULED", "PUBLISHING"] },
+        },
+      })
+
+      // Enforce strict limit within transaction
+      if (existingCount >= MAX_POSTS_PER_DAY) {
+        throw new Error(`Daily limit of ${MAX_POSTS_PER_DAY} posts already reached for ${platform}`)
+      }
+
+      // Check if exact time slot is already taken (within 1 minute tolerance)
+      const oneMinuteBefore = new Date(scheduledFor.getTime() - 60000)
+      const oneMinuteAfter = new Date(scheduledFor.getTime() + 60000)
+
+      const existingAtTime = await tx.scheduledPost.findFirst({
+        where: {
+          userId,
+          platform,
+          scheduledFor: {
+            gte: oneMinuteBefore,
+            lte: oneMinuteAfter,
+          },
+          status: { in: ["SCHEDULED", "PUBLISHING"] },
+        },
+      })
+
+      if (existingAtTime) {
+        throw new Error(`Time slot ${format(scheduledInUserTz, "MMM dd, HH:mm")} already taken`)
+      }
+
+      // Safe to insert
+      await tx.scheduledPost.create({
+        data: {
+          userId,
+          socialAccountId,
+          feedId,
+          platform,
+          content,
+          scheduledFor,
+          status: "SCHEDULED",
+        },
+      })
+    })
+
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
 }
 
 /**
@@ -277,28 +375,30 @@ export async function distributeNaturally(feedId: string): Promise<{
       if (twitterAccount) {
         try {
           const scheduledFor = await getNextNaturalSlot(user.id, "TWITTER")
-
-          await prisma.scheduledPost.create({
-            data: {
-              userId: user.id,
-              socialAccountId: twitterAccount.id,
-              feedId: feed.id,
-              platform: "TWITTER",
-              content: generatedPost.twitterContent,
-              scheduledFor,
-              status: "SCHEDULED",
-            },
-          })
-
-          twitterScheduled++
-          userHasPosts = true
-
-          // Log in user's timezone for debugging
           const prefs = await getUserPreferences(user.id)
-          const userTime = toZonedTime(scheduledFor, prefs.timezone)
-          console.log(
-            `  🐦 ${user.email}: ${format(userTime, "MMM dd, HH:mm")} ${prefs.timezone}`
+
+          const result = await safelySchedulePost(
+            user.id,
+            twitterAccount.id,
+            feed.id,
+            "TWITTER",
+            generatedPost.twitterContent,
+            scheduledFor,
+            prefs.timezone
           )
+
+          if (result.success) {
+            twitterScheduled++
+            userHasPosts = true
+
+            // Log in user's timezone for debugging
+            const userTime = toZonedTime(scheduledFor, prefs.timezone)
+            console.log(
+              `  🐦 ${user.email}: ${format(userTime, "MMM dd, HH:mm")} ${prefs.timezone}`
+            )
+          } else {
+            throw new Error(result.error || "Failed to schedule post")
+          }
         } catch (error) {
           const msg = `Twitter scheduling failed for user ${user.email}: ${error instanceof Error ? error.message : "Unknown"}`
           errors.push(msg)
@@ -310,28 +410,30 @@ export async function distributeNaturally(feedId: string): Promise<{
       if (linkedinAccount) {
         try {
           const scheduledFor = await getNextNaturalSlot(user.id, "LINKEDIN")
-
-          await prisma.scheduledPost.create({
-            data: {
-              userId: user.id,
-              socialAccountId: linkedinAccount.id,
-              feedId: feed.id,
-              platform: "LINKEDIN",
-              content: generatedPost.linkedinContent,
-              scheduledFor,
-              status: "SCHEDULED",
-            },
-          })
-
-          linkedinScheduled++
-          userHasPosts = true
-
-          // Log in user's timezone for debugging
           const prefs = await getUserPreferences(user.id)
-          const userTime = toZonedTime(scheduledFor, prefs.timezone)
-          console.log(
-            `  💼 ${user.email}: ${format(userTime, "MMM dd, HH:mm")} ${prefs.timezone}`
+
+          const result = await safelySchedulePost(
+            user.id,
+            linkedinAccount.id,
+            feed.id,
+            "LINKEDIN",
+            generatedPost.linkedinContent,
+            scheduledFor,
+            prefs.timezone
           )
+
+          if (result.success) {
+            linkedinScheduled++
+            userHasPosts = true
+
+            // Log in user's timezone for debugging
+            const userTime = toZonedTime(scheduledFor, prefs.timezone)
+            console.log(
+              `  💼 ${user.email}: ${format(userTime, "MMM dd, HH:mm")} ${prefs.timezone}`
+            )
+          } else {
+            throw new Error(result.error || "Failed to schedule post")
+          }
         } catch (error) {
           const msg = `LinkedIn scheduling failed for user ${user.email}: ${error instanceof Error ? error.message : "Unknown"}`
           errors.push(msg)

@@ -12,8 +12,13 @@ const OPTIMAL_TIMES = {
 }
 
 /**
+ * Maximum posts per day per platform (strict limit)
+ */
+const MAX_POSTS_PER_DAY = 6
+
+/**
  * Get next available posting slot for a user on a platform
- * Ensures no scheduling conflicts
+ * Ensures no scheduling conflicts and enforces strict 6 posts per day limit
  */
 async function getNextPostingSlot(
   userId: string,
@@ -23,35 +28,125 @@ async function getNextPostingSlot(
   const today = startOfDay(now)
   const platformKey = platform.toLowerCase() as "twitter" | "linkedin"
   const optimalTimes = OPTIMAL_TIMES[platformKey]
+  const MAX_POSTS_PER_DAY = 6
 
-  // Get existing scheduled posts for this user and platform
-  const existingPosts = await prisma.scheduledPost.findMany({
-    where: {
-      userId,
-      platform,
-      scheduledFor: { gte: today },
-      status: { in: ["SCHEDULED", "PUBLISHING"] },
-    },
-    select: { scheduledFor: true },
-  })
+  // Try to find an available slot, checking multiple days if needed
+  for (let daysAhead = 0; daysAhead < 14; daysAhead++) {
+    const targetDay = addHours(today, daysAhead * 24)
+    const dayEnd = addHours(targetDay, 24)
 
-  const scheduledHours = new Set(
-    existingPosts.map((p) => new Date(p.scheduledFor).getUTCHours())
-  )
+    // Get existing scheduled posts for this specific day only
+    const existingPosts = await prisma.scheduledPost.findMany({
+      where: {
+        userId,
+        platform,
+        scheduledFor: {
+          gte: targetDay,
+          lt: dayEnd, // Critical: only posts within this 24-hour period
+        },
+        status: { in: ["SCHEDULED", "PUBLISHING"] },
+      },
+      select: { scheduledFor: true },
+    })
 
-  // Find next available optimal time today
-  for (const hour of optimalTimes) {
-    if (!scheduledHours.has(hour)) {
-      const slotTime = setMinutes(setHours(today, hour), 0)
-      if (slotTime > now) {
-        return slotTime
+    // Enforce strict per-day limit
+    if (existingPosts.length >= MAX_POSTS_PER_DAY) {
+      continue // This day is full, try next day
+    }
+
+    // Build set of hours already taken on this specific day
+    const scheduledHours = new Set(
+      existingPosts.map((p) => new Date(p.scheduledFor).getUTCHours())
+    )
+
+    // Find next available optimal time for this day
+    for (const hour of optimalTimes) {
+      if (!scheduledHours.has(hour)) {
+        const slotTime = setMinutes(setHours(targetDay, hour), 0)
+        // Only return if slot is in the future
+        if (slotTime > now) {
+          return slotTime
+        }
       }
     }
   }
 
-  // All today's slots taken, use first slot tomorrow
-  const tomorrow = addHours(today, 24)
-  return setMinutes(setHours(tomorrow, optimalTimes[0]), 0)
+  // Fallback: if no slot found in 14 days, schedule 15 days out
+  const fallbackDay = addHours(today, 15 * 24)
+  return setMinutes(setHours(fallbackDay, optimalTimes[0]), 0)
+}
+
+/**
+ * Safely schedule a post with transaction protection against race conditions
+ * Re-validates the slot availability within a transaction before inserting
+ */
+async function safelySchedulePost(
+  userId: string,
+  socialAccountId: string,
+  feedId: string,
+  platform: "TWITTER" | "LINKEDIN",
+  content: string,
+  scheduledFor: Date
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Use transaction with isolation to prevent race conditions
+    await prisma.$transaction(async (tx) => {
+      const dayStart = startOfDay(scheduledFor)
+      const dayEnd = addHours(dayStart, 24)
+
+      // Re-check the count within transaction to prevent race conditions
+      const existingCount = await tx.scheduledPost.count({
+        where: {
+          userId,
+          platform,
+          scheduledFor: {
+            gte: dayStart,
+            lt: dayEnd,
+          },
+          status: { in: ["SCHEDULED", "PUBLISHING"] },
+        },
+      })
+
+      // Enforce strict limit within transaction
+      if (existingCount >= MAX_POSTS_PER_DAY) {
+        throw new Error(`Daily limit of ${MAX_POSTS_PER_DAY} posts already reached for ${platform}`)
+      }
+
+      // Check if exact time slot is already taken
+      const existingAtTime = await tx.scheduledPost.findFirst({
+        where: {
+          userId,
+          platform,
+          scheduledFor,
+          status: { in: ["SCHEDULED", "PUBLISHING"] },
+        },
+      })
+
+      if (existingAtTime) {
+        throw new Error(`Time slot ${scheduledFor.toISOString()} already taken`)
+      }
+
+      // Safe to insert
+      await tx.scheduledPost.create({
+        data: {
+          userId,
+          socialAccountId,
+          feedId,
+          platform,
+          content,
+          scheduledFor,
+          status: "SCHEDULED",
+        },
+      })
+    })
+
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
 }
 
 /**
@@ -163,20 +258,21 @@ async function distributeLegacy(feedId: string): Promise<{
         try {
           const scheduledFor = await getNextPostingSlot(user.id, "TWITTER")
 
-          await prisma.scheduledPost.create({
-            data: {
-              userId: user.id,
-              socialAccountId: twitterAccount.id,
-              feedId: feed.id,
-              platform: "TWITTER",
-              content: generatedPost.twitterContent,
-              scheduledFor,
-              status: "SCHEDULED"
-            }
-          })
+          const result = await safelySchedulePost(
+            user.id,
+            twitterAccount.id,
+            feed.id,
+            "TWITTER",
+            generatedPost.twitterContent,
+            scheduledFor
+          )
 
-          twitterScheduled++
-          userHasPosts = true
+          if (result.success) {
+            twitterScheduled++
+            userHasPosts = true
+          } else {
+            throw new Error(result.error || "Failed to schedule post")
+          }
         } catch (error) {
           const msg = `Twitter scheduling failed for user ${user.email}: ${error instanceof Error ? error.message : "Unknown"}`
           errors.push(msg)
@@ -189,20 +285,21 @@ async function distributeLegacy(feedId: string): Promise<{
         try {
           const scheduledFor = await getNextPostingSlot(user.id, "LINKEDIN")
 
-          await prisma.scheduledPost.create({
-            data: {
-              userId: user.id,
-              socialAccountId: linkedinAccount.id,
-              feedId: feed.id,
-              platform: "LINKEDIN",
-              content: generatedPost.linkedinContent,
-              scheduledFor,
-              status: "SCHEDULED"
-            }
-          })
+          const result = await safelySchedulePost(
+            user.id,
+            linkedinAccount.id,
+            feed.id,
+            "LINKEDIN",
+            generatedPost.linkedinContent,
+            scheduledFor
+          )
 
-          linkedinScheduled++
-          userHasPosts = true
+          if (result.success) {
+            linkedinScheduled++
+            userHasPosts = true
+          } else {
+            throw new Error(result.error || "Failed to schedule post")
+          }
         } catch (error) {
           const msg = `LinkedIn scheduling failed for user ${user.email}: ${error instanceof Error ? error.message : "Unknown"}`
           errors.push(msg)
