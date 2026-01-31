@@ -294,6 +294,8 @@ interface AdminTopic {
   name: string
   slug: string
   description: string | null
+  enableTwitter: boolean
+  enableLinkedin: boolean
   rssFeeds: RSSFeed[]
   _count: {
     rssFeeds: number
