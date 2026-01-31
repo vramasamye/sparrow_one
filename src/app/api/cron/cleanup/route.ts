@@ -17,16 +17,17 @@ export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization")
   const url = new URL(request.url)
   const secretParam = url.searchParams.get("secret")
+  const force = url.searchParams.get("force") === "true"
 
   if (!verifyCronAuth(authHeader, secretParam)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
-    console.log("Cleanup cron job started")
+    console.log(`Cleanup cron job started ${force ? '(FORCE)' : ''}`)
 
     const { results, totalDeleted, errors } = await withDatabase(async () => {
-      const results = await runAllCleanupJobs()
+      const results = await runAllCleanupJobs(force)
       const totalDeleted = results.reduce((sum, r) => sum + r.deletedCount, 0)
       const errors = results.filter((r) => r.error)
       return { results, totalDeleted, errors }

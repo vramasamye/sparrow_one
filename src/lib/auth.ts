@@ -65,6 +65,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   events: {
+    async createUser({ user }) {
+      try {
+        if (user.id) {
+          await prisma.userPreferences.create({
+            data: {
+              userId: user.id,
+            },
+          })
+          console.log(`Created default preferences for new user ${user.id}`)
+        }
+      } catch (error) {
+        console.error("Error creating default user preferences:", error)
+      }
+    },
     async linkAccount({ user, account }) {
       try {
         // When a user links a new OAuth account (Twitter/LinkedIn for posting)

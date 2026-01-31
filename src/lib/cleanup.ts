@@ -7,28 +7,33 @@ interface CleanupResult {
 }
 
 /**
- * Delete rejected feeds older than 7 days
+ * Delete rejected feeds older than 24 hours (or ALL if force=true)
  */
-export async function cleanupRejectedFeeds(): Promise<CleanupResult> {
+export async function cleanupRejectedFeeds(force = false): Promise<CleanupResult> {
   const result: CleanupResult = {
     job: "Rejected Feeds Cleanup",
     deletedCount: 0,
   }
 
   try {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
+    const where = force 
+      ? { status: "REJECTED" } // Delete ALL rejected if force=true
+      : { 
+          status: "REJECTED",
+          updatedAt: {
+            lt: twentyFourHoursAgo,
+          },
+        }
+
+    // @ts-ignore - Prisma where clause is compatible but TS might complain about simple vs complex object
     const deleted = await prisma.feed.deleteMany({
-      where: {
-        status: "REJECTED",
-        updatedAt: {
-          lt: sevenDaysAgo,
-        },
-      },
+      where: where as any,
     })
 
     result.deletedCount = deleted.count
-    console.log(`Cleaned up ${deleted.count} rejected feeds`)
+    console.log(`Cleaned up ${deleted.count} rejected feeds ${force ? '(ALL)' : '(older than 24 hours)'}`)
   } catch (error) {
     result.error = error instanceof Error ? error.message : "Unknown error"
     console.error("Error cleaning up rejected feeds:", error)
@@ -69,7 +74,7 @@ export async function cleanupOldPendingFeeds(): Promise<CleanupResult> {
 }
 
 /**
- * Clean up old cancelled/failed scheduled posts (older than 30 days)
+ * Clean up old cancelled/failed scheduled posts (older than 24 hours)
  */
 export async function cleanupOldPosts(): Promise<CleanupResult> {
   const result: CleanupResult = {
@@ -78,7 +83,7 @@ export async function cleanupOldPosts(): Promise<CleanupResult> {
   }
 
   try {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
     const deleted = await prisma.scheduledPost.deleteMany({
       where: {
@@ -86,13 +91,13 @@ export async function cleanupOldPosts(): Promise<CleanupResult> {
           in: ["CANCELLED", "FAILED"],
         },
         updatedAt: {
-          lt: thirtyDaysAgo,
+          lt: twentyFourHoursAgo,
         },
       },
     })
 
     result.deletedCount = deleted.count
-    console.log(`Cleaned up ${deleted.count} old cancelled/failed posts`)
+    console.log(`Cleaned up ${deleted.count} old cancelled/failed posts (older than 24 hours)`)
   } catch (error) {
     result.error = error instanceof Error ? error.message : "Unknown error"
     console.error("Error cleaning up old posts:", error)
@@ -134,11 +139,11 @@ export async function cleanupOldPostHistory(): Promise<CleanupResult> {
 /**
  * Run all cleanup jobs
  */
-export async function runAllCleanupJobs(): Promise<CleanupResult[]> {
-  console.log("Starting cleanup jobs...")
+export async function runAllCleanupJobs(force = false): Promise<CleanupResult[]> {
+  console.log(`Starting cleanup jobs... ${force ? '(FORCE MODE)' : ''}`)
 
   const results = await Promise.all([
-    cleanupRejectedFeeds(),
+    cleanupRejectedFeeds(force),
     cleanupOldPendingFeeds(),
     cleanupOldPosts(),
     cleanupOldPostHistory(),
