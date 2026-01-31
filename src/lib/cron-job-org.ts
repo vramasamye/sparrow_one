@@ -136,10 +136,11 @@ export class CronJobOrgService {
    */
   async updateJob(jobId: number, config: Partial<CronJobConfig>): Promise<CronJobResponse> {
     try {
-      const response = await this.request(`/jobs/${jobId}`, "PATCH", {
+      await this.request(`/jobs/${jobId}`, "PATCH", {
         job: config
       })
-      return { jobId: response.jobId }
+      // PATCH doesn't return jobId in response, so return the input jobId
+      return { jobId }
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : "Unknown error"
@@ -189,8 +190,8 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
     case 'balanced':
       return {
         name: 'Balanced',
-        description: 'Optimized balance between queue processing and post publishing',
-        totalRuns: 1512, // 72 (processQueue) + 1440 (publishPosts every 1 min) + 48 (scoreFeeds)
+        description: 'Optimized balance with full automation enabled',
+        totalRuns: 1574, // 1440 (publishPosts) + 72 (processQueue) + 48 (scoreFeeds) + 12 (processFeeds) + 1 (refreshTokens) + 1 (cleanup)
         jobs: {
           scoreFeeds: {
             enabled: true,
@@ -208,7 +209,7 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
             schedule: {
               timezone: 'UTC',
               hours: [-1],
-              minutes: [0, 20, 40], // Every 20 minutes
+              minutes: [0, 20, 40], // Every 20 minutes (72/day)
               mdays: [-1],
               months: [-1],
               wdays: [-1]
@@ -218,7 +219,7 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
             enabled: true,
             schedule: {
               timezone: 'UTC',
-              hours: [-1], // Every hour
+              hours: [-1],
               minutes: [-1], // Every minute (1440/day)
               mdays: [-1],
               months: [-1],
@@ -226,16 +227,37 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
             }
           },
           processFeeds: {
-            enabled: false,
-            schedule: {} // Manual only
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22], // Every 2 hours (12/day)
+              minutes: [0],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
           },
           refreshTokens: {
-            enabled: false,
-            schedule: {} // Manual only
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [0], // Once daily at midnight (1/day)
+              minutes: [30],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
           },
           cleanup: {
-            enabled: false,
-            schedule: {} // Manual only
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [3], // Once daily at 3am (1/day)
+              minutes: [0],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
           }
         }
       }
@@ -243,8 +265,8 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
     case 'light':
       return {
         name: 'Light',
-        description: 'Minimal automation - only critical jobs (manual workflow)',
-        totalRuns: 1512, // 48 (processQueue) + 1440 (publishPosts every 1 min) + 24 (scoreFeeds)
+        description: 'Lighter automation with less frequent background tasks',
+        totalRuns: 1522, // 1440 (publishPosts) + 48 (processQueue) + 24 (scoreFeeds) + 8 (processFeeds) + 1 (refreshTokens) + 1 (cleanup)
         jobs: {
           scoreFeeds: {
             enabled: true,
@@ -262,7 +284,7 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
             schedule: {
               timezone: 'UTC',
               hours: [-1],
-              minutes: [0, 30], // Every 30 minutes
+              minutes: [0, 30], // Every 30 minutes (48/day)
               mdays: [-1],
               months: [-1],
               wdays: [-1]
@@ -280,16 +302,37 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
             }
           },
           processFeeds: {
-            enabled: false,
-            schedule: {}
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [0, 3, 6, 9, 12, 15, 18, 21], // Every 3 hours (8/day)
+              minutes: [0],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
           },
           refreshTokens: {
-            enabled: false,
-            schedule: {}
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [0], // Once daily at midnight (1/day)
+              minutes: [30],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
           },
           cleanup: {
-            enabled: false,
-            schedule: {}
+            enabled: true,
+            schedule: {
+              timezone: 'UTC',
+              hours: [3], // Once daily at 3am (1/day)
+              minutes: [0],
+              mdays: [-1],
+              months: [-1],
+              wdays: [-1]
+            }
           }
         }
       }
@@ -297,8 +340,8 @@ export function getCronStrategy(strategy: CronStrategy): CronStrategyConfig {
     case 'full':
       return {
         name: 'Full Automation',
-        description: 'Complete automation with all background tasks',
-        totalRuns: 1514, // 12 (processQueue) + 1440 (publishPosts every 1 min) + 12 (processFeeds) + 48 (scoreFeeds) + 1 (refreshTokens) + 1 (cleanup)
+        description: 'Maximum automation with all background tasks enabled',
+        totalRuns: 1514, // 1440 (publishPosts) + 48 (scoreFeeds) + 12 (processQueue) + 12 (processFeeds) + 1 (refreshTokens) + 1 (cleanup)
         jobs: {
           scoreFeeds: {
             enabled: true,

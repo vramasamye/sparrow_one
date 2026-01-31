@@ -4,10 +4,10 @@ This guide explains how to set up automated cron jobs for Sparrow using cron-job
 
 ## Available Strategies
 
-Sparrow supports three cron strategies, each optimized for different use cases while staying within the 100 runs/day limit.
+Sparrow supports three cron strategies, each optimized for different use cases. All strategies stay well under the 5,000 runs/day limit (cron-job.org free tier).
 
 ### 🎯 Balanced (Recommended)
-**1,560 runs/day** - Optimal balance between automation and manual control
+**1,574 runs/day** - Optimal balance with full automation
 
 ```bash
 npm run setup-cron:balanced
@@ -17,23 +17,21 @@ npm run setup-cron:balanced
 - 📤 Publish Posts: Every 1 minute (1,440/day) - sequential per user
 - ⚙️  Process Queue: Every 20 minutes (72/day)
 - 🎯 Score Feeds: Every 30 minutes (48/day)
-
-**Manual Jobs:**
-- 📥 Feed Processing: Run when you want fresh RSS articles
-- 🔄 Refresh Tokens: Run weekly to keep OAuth tokens fresh
-- 🗑️  Cleanup: Run monthly to clean up old data
+- 📥 Feed Processing: Every 2 hours (12/day)
+- 🔄 Refresh Tokens: Daily at midnight (1/day)
+- 🗑️  Cleanup: Daily at 3am (1/day)
 
 **Best for:**
-- Instant post publishing (within 1 minute of schedule)
+- Complete hands-off automation
+- Instant post publishing (within 1 minute)
 - Fast queue processing (~13 hours to clear 38 feeds)
-- Automatic content scoring with Llama Guard
-- Manual control over RSS fetching
+- Regular RSS feed updates (every 2 hours)
 - Most users
 
 ---
 
 ### 💡 Light
-**1,512 runs/day** - Balanced automation with instant publishing
+**1,522 runs/day** - Lighter automation with less frequent updates
 
 ```bash
 npm run setup-cron:light
@@ -43,22 +41,21 @@ npm run setup-cron:light
 - 📤 Publish Posts: Every 1 minute (1,440/day) - sequential per user
 - ⚙️  Process Queue: Every 30 minutes (48/day)
 - 🎯 Score Feeds: Every 1 hour (24/day)
-
-**Manual Jobs:**
-- 📥 Feed Processing: Manual only
-- 🔄 Refresh Tokens: Manual only
-- 🗑️  Cleanup: Manual only
+- 📥 Feed Processing: Every 3 hours (8/day)
+- 🔄 Refresh Tokens: Daily at midnight (1/day)
+- 🗑️  Cleanup: Daily at 3am (1/day)
 
 **Best for:**
-- Instant post publishing (within 1 minute of schedule)
-- Users who prefer manual control over RSS fetching
-- Automatic content scoring
+- Instant post publishing (within 1 minute)
+- Moderate queue processing (~19 hours to clear 38 feeds)
+- Less frequent RSS updates (every 3 hours)
+- Lower resource usage
 - Testing and development
 
 ---
 
 ### 🚀 Full Automation
-**1,514 runs/day** - Complete hands-off automation
+**1,514 runs/day** - Maximum automation for enterprise
 
 ```bash
 npm run setup-cron:full
@@ -73,10 +70,11 @@ npm run setup-cron:full
 - 🗑️  Cleanup: Daily at 3:00am UTC (1/day)
 
 **Best for:**
-- Completely automated operation
+- Slowest queue processing but most reliable (~76 hours to clear 38 feeds)
+- Even load distribution across the day
 - Instant post publishing (within 1 minute)
 - Set it and forget it
-- Users who don't want to manage cron jobs
+- Enterprise deployments
 
 ---
 
@@ -124,36 +122,29 @@ npm run setup-cron
 
 ---
 
-## Manual Job URLs
+## Manual Testing
 
-For manual jobs, bookmark these URLs (replace `YOUR_SECRET` with your `CRON_SECRET`):
-
-### Feed Processing
-Fetch new RSS articles from all active feeds.
+You can manually trigger any cron job for testing by visiting these URLs (replace `YOUR_SECRET` with your `CRON_SECRET`):
 
 ```
+# Publish Posts
+https://your-app.vercel.app/api/cron/publish-posts?secret=YOUR_SECRET
+
+# Process Queue
+https://your-app.vercel.app/api/cron/process-queue?secret=YOUR_SECRET
+
+# Score Feeds
+https://your-app.vercel.app/api/cron/score-feeds?secret=YOUR_SECRET
+
+# Feed Processing
 https://your-app.vercel.app/api/cron/process-feeds?secret=YOUR_SECRET
-```
 
-**When to run:** 2-4 times per day (morning, afternoon, evening, night)
-
-### Refresh Tokens
-Refresh expiring OAuth tokens (Twitter, LinkedIn).
-
-```
+# Refresh Tokens
 https://your-app.vercel.app/api/cron/refresh-tokens?secret=YOUR_SECRET
-```
 
-**When to run:** Once per week (tokens typically last 30+ days)
-
-### Cleanup
-Remove old rejected/pending feeds and cleanup database.
-
-```
+# Cleanup
 https://your-app.vercel.app/api/cron/cleanup?secret=YOUR_SECRET
 ```
-
-**When to run:** Once per month
 
 ---
 
@@ -161,17 +152,19 @@ https://your-app.vercel.app/api/cron/cleanup?secret=YOUR_SECRET
 
 | Feature | Balanced | Light | Full |
 |---------|----------|-------|------|
-| **Runs/day** | 1,560 | 1,512 | 1,514 |
+| **Runs/day** | 1,574 | 1,522 | 1,514 |
 | **Post publishing** | Every 1 min | Every 1 min | Every 1 min |
 | **Queue processing** | Every 20 min | Every 30 min | Every 2 hrs |
 | **Feed scoring** | Every 30 min | Every 1 hr | Every 30 min |
-| **RSS fetching** | Manual | Manual | Automated |
-| **Token refresh** | Manual | Manual | Automated |
-| **Cleanup** | Manual | Manual | Automated |
+| **RSS fetching** | Every 2 hrs | Every 3 hrs | Every 2 hrs |
+| **Token refresh** | Daily | Daily | Daily |
+| **Cleanup** | Daily | Daily | Daily |
 | **Queue speed** | Fast (13 hrs) | Medium (19 hrs) | Slow (76 hrs) |
 | **Post delay** | Max 1 min | Max 1 min | Max 1 min |
+| **RSS refresh** | Every 2 hrs | Every 3 hrs | Every 2 hrs |
 | **Publishing** | Sequential per user | Sequential per user | Sequential per user |
-| **Maintenance** | Low | Low | None |
+| **Automation** | Full | Full | Full |
+| **Maintenance** | None | None | None |
 
 ---
 
@@ -267,11 +260,11 @@ curl -X DELETE "https://your-app.vercel.app/api/cron/manage?jobId=123&secret=YOU
 
 ## FAQ
 
-**Q: Can I mix manual and automated strategies?**
-A: Yes! Choose `balanced` or `light`, then manually run the automated jobs when needed.
+**Q: Are all jobs fully automated now?**
+A: Yes! All three strategies now include full automation for all jobs (publishing, processing, scoring, RSS fetching, token refresh, and cleanup).
 
-**Q: What if I exceed 100 runs/day?**
-A: Cron-job.org will stop executing jobs until the next day. Monitor your usage in the console.
+**Q: What if I exceed 5,000 runs/day?**
+A: Cron-job.org free tier allows 5,000 runs/day. All strategies stay well under this limit (~1,500-1,600/day). Monitor your usage in the console.
 
 **Q: How do I test a cron job?**
 A: Click "Run now" in cron-job.org, or paste the URL in your browser.

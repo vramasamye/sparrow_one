@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { addHours, setHours, setMinutes, startOfDay } from "date-fns"
+import { distributeNaturally } from "@/lib/natural-scheduler"
 
 /**
  * Optimal posting times (hour in UTC)
@@ -55,9 +56,36 @@ async function getNextPostingSlot(
 
 /**
  * Distribute generated posts to all subscribers of a topic
- * Uses staggered distribution (Option 2) - cycles through optimal times
+ *
+ * By default, uses natural scheduling with user preferences (timezone, personalized times)
+ * Set USE_LEGACY_SCHEDULING=true in env to use old staggered UTC-based scheduling
  */
 export async function distributeToSubscribers(feedId: string): Promise<{
+  success: boolean
+  usersScheduled: number
+  twitterScheduled: number
+  linkedinScheduled: number
+  errors: string[]
+}> {
+  // Use natural scheduling by default (respects user timezone and preferences)
+  const useLegacyScheduling = process.env.USE_LEGACY_SCHEDULING === "true"
+
+  if (!useLegacyScheduling) {
+    console.log("📅 Using natural scheduling (user preferences)")
+    return await distributeNaturally(feedId)
+  }
+
+  // Legacy scheduling (for backward compatibility)
+  console.log("📅 Using legacy scheduling (UTC-based)")
+  return await distributeLegacy(feedId)
+}
+
+/**
+ * Legacy distribution function
+ * Uses staggered distribution with hardcoded UTC times (Option 2)
+ * @deprecated Use distributeNaturally instead
+ */
+async function distributeLegacy(feedId: string): Promise<{
   success: boolean
   usersScheduled: number
   twitterScheduled: number

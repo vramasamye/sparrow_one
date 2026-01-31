@@ -28,6 +28,7 @@ model User {
   scheduledPosts ScheduledPost[]
   postHistory    UserPostHistory[]
   userTopics     UserTopic[]
+  preferences    UserPreferences?
 
   @@map("users")
 }
@@ -35,6 +36,40 @@ model User {
 enum UserRole {
   USER
   ADMIN
+}
+
+// ============================================
+// User Preferences for Natural Scheduling
+// ============================================
+
+model UserPreferences {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+
+  // Timezone (IANA timezone string, e.g., "America/New_York")
+  timezone  String   @default("UTC")
+
+  // Posting Schedule (array of hours in local time)
+  twitterTimes   Json  @default("[8, 10, 12, 14, 17, 19]")  // 6 slots
+  linkedinTimes  Json  @default("[9, 11, 13, 16, 18, 20]")  // 6 slots
+
+  // Posting Frequency
+  postsPerWeek   Int   @default(7)  // 1-14 posts per week
+
+  // Active Days (0=Sunday, 6=Saturday)
+  activeDays     Json  @default("[1, 2, 3, 4, 5]") // Mon-Fri by default
+
+  // Quiet Hours (hours in local time)
+  quietStart     Int?  // e.g., 22 = 10pm
+  quietEnd       Int?  // e.g., 7 = 7am
+
+  // Meta
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
 }
 
 model Account {
