@@ -252,7 +252,11 @@ export function FeedList() {
                       </span>
                     )}
                     {/* Quality Score Badge */}
-                    {feed.qualityScore !== null && (
+                    {!feed.scoredAt ? (
+                      <Badge variant="outline" className="ml-2 border-yellow-500 text-yellow-600">
+                        Pending Score
+                      </Badge>
+                    ) : feed.qualityScore !== null && (
                       <Badge
                         variant={
                           feed.qualityScore >= 80 ? "default" :

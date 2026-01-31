@@ -41,8 +41,8 @@ test_cron() {
     "$BASE_URL$endpoint")
 
   # Split response and status code
-  http_code=$(echo "$response" | tail -n1)
-  body=$(echo "$response" | head -n-1)
+  http_code=$(echo "$response" | tail -n 1)
+  body=$(echo "$response" | head -n -1)
 
   # Check status
   if [ "$http_code" -eq 200 ]; then

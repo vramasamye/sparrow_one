@@ -3,6 +3,8 @@ import { scoreUnscoredFeeds } from "@/lib/batch-scorer"
 import { verifyCronAuth } from "@/lib/cron-auth"
 import { withDatabase } from "@/lib/cron-db"
 
+export const maxDuration = 300 // 5 minutes
+
 /**
  * Feed Scoring Cron Job
  * Schedule: Every 30 minutes
@@ -26,9 +28,12 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    // Score up to 60 feeds per run (safe for 30 RPM limit)
+    // Score up to 9 feeds per run (safe for Vercel Hobby 10s limit if parallel, but serial takes 18s)
+    // Safe fallback: 5 feeds * 2s = 10s. This is tight for Hobby.
+    // If Pro (maxDuration=300), we can do more.
+    // For now, let's target 5 to clear the immediate timeout error.
     const result = await withDatabase(async () => {
-      return await scoreUnscoredFeeds(60)
+      return await scoreUnscoredFeeds(5)
     })
 
     const duration = Date.now() - startTime

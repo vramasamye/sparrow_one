@@ -183,6 +183,9 @@ async function run() {
   }
 }
 
-run()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect())
+// Only run if called directly
+if (require.main === module) {
+  run()
+    .catch(console.error)
+    .finally(() => prisma.$disconnect())
+}

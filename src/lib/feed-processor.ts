@@ -156,10 +156,10 @@ export async function processSingleFeed(
       }
     }
 
-    // Score new items in parallel
+    // Score new items in parallel - REMOVED to prevent timeouts
+    // The separate 'score-feeds' cron job will pick these up and score them safely
     if (newFeedIds.length > 0) {
-      console.log(`Scoring ${newFeedIds.length} new items from ${feedName}...`)
-      await Promise.allSettled(newFeedIds.map(id => scoreFeed(id)))
+      console.log(`Added ${newFeedIds.length} new items from ${feedName} (queued for scoring)`)
     }
 
     // Update feed last fetched timestamp
