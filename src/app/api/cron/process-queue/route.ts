@@ -33,47 +33,38 @@ export async function GET(request: Request) {
   console.log("🔄 Starting queue processor...")
   const startTime = Date.now()
 
-  // Helper function to retry database operations (for Neon wake-up)
-  async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
-    let lastError: Error | null = null
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        return await fn()
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error))
-        if (attempt < maxAttempts && lastError.message.includes("Can't reach database")) {
-          console.log(`  ⚠️  Database connection failed, retrying (${attempt}/${maxAttempts})...`)
-          await new Promise(resolve => setTimeout(resolve, 2000))
-        } else if (attempt >= maxAttempts) {
-          throw lastError
-        }
-      }
-    }
-    throw lastError
-  }
-
   try {
-    // 1. Recover any stuck jobs from previous crashes (with retry)
-    const recovered = await withRetry(() => recoverStuckJobs())
-    if (recovered > 0) {
-      console.log(`  🔄 Recovered ${recovered} stuck jobs`)
-    }
+    const result = await withDatabase(async () => {
+      // 1. Recover any stuck jobs from previous crashes
+      const recovered = await recoverStuckJobs()
+      if (recovered > 0) {
+        console.log(`  🔄 Recovered ${recovered} stuck jobs`)
+      }
 
-    // 2. Get queue stats (with retry)
-    const stats = await withRetry(() => getQueueStats())
-    console.log(`  📊 Queue stats: ${stats.queued} queued, ${stats.processing} processing`)
+      // 2. Get queue stats
+      const stats = await getQueueStats()
+      console.log(`  📊 Queue stats: ${stats.queued} queued, ${stats.processing} processing`)
 
-    if (stats.queued === 0) {
+      if (stats.queued === 0) {
+        return { empty: true, stats }
+      }
+
+      // 3. Get next job from queue
+      const job = await dequeueNextJob()
+
+      return { empty: false, stats, job }
+    })
+
+    if (result.empty) {
       return NextResponse.json({
         success: true,
         message: "Queue is empty",
-        stats,
+        stats: result.stats,
         duration: `${Date.now() - startTime}ms`
       })
     }
 
-    // 3. Get next job from queue
-    const job = await dequeueNextJob()
+    const { job, stats } = result
 
     if (!job) {
       return NextResponse.json({
@@ -88,10 +79,14 @@ export async function GET(request: Request) {
 
     // 4. Generate posts (with rate limit retry)
     console.log(`  🤖 Generating posts...`)
-    const genResult = await generatePostsForFeed(job.feedId)
+    const genResult = await withDatabase(async () => {
+      return await generatePostsForFeed(job.feedId)
+    })
 
     if (!genResult.success) {
-      await markJobFailed(job, genResult.error || "Generation failed")
+      await withDatabase(async () => {
+        await markJobFailed(job, genResult.error || "Generation failed")
+      })
       return NextResponse.json({
         success: false,
         error: "Generation failed",
@@ -105,10 +100,14 @@ export async function GET(request: Request) {
 
     // 5. Distribute to subscribers
     console.log(`  📢 Distributing to subscribers...`)
-    const distResult = await distributeToSubscribers(job.feedId)
+    const distResult = await withDatabase(async () => {
+      return await distributeToSubscribers(job.feedId)
+    })
 
     if (!distResult.success) {
-      await markJobFailed(job, `Distribution failed: ${distResult.errors.join(", ")}`)
+      await withDatabase(async () => {
+        await markJobFailed(job, `Distribution failed: ${distResult.errors.join(", ")}`)
+      })
       return NextResponse.json({
         success: false,
         error: "Distribution failed",
@@ -121,7 +120,9 @@ export async function GET(request: Request) {
     console.log(`  ✅ Distributed successfully`)
 
     // 6. Mark job as completed
-    await markJobCompleted(job)
+    await withDatabase(async () => {
+      await markJobCompleted(job)
+    })
 
     const duration = Date.now() - startTime
 
@@ -130,6 +131,10 @@ export async function GET(request: Request) {
     console.log(`   Users scheduled: ${distResult.usersScheduled}`)
     console.log(`   Twitter posts: ${distResult.twitterScheduled}`)
     console.log(`   LinkedIn posts: ${distResult.linkedinScheduled}`)
+
+    const finalStats = await withDatabase(async () => {
+      return await getQueueStats()
+    })
 
     return NextResponse.json({
       success: true,
@@ -144,7 +149,7 @@ export async function GET(request: Request) {
         linkedinScheduled: distResult.linkedinScheduled,
         errors: distResult.errors
       },
-      stats: await getQueueStats()
+      stats: finalStats
     })
 
   } catch (error) {

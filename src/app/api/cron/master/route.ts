@@ -29,45 +29,47 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 1. Refresh Tokens
-    console.log("Master Cron: Refreshing tokens...")
-    await refreshExpiringTokens()
-    results.tasks.refreshTokens = "success"
+    await withDatabase(async () => {
+      // 1. Refresh Tokens
+      console.log("Master Cron: Refreshing tokens...")
+      await refreshExpiringTokens()
+      results.tasks.refreshTokens = "success"
 
-    // 2. Process Feeds
-    console.log("Master Cron: Processing feeds...")
-    const feedResults = await processAllFeeds()
-    results.tasks.processFeeds = {
-      success: true,
-      newItems: feedResults.reduce((sum, r) => sum + r.newItems, 0)
-    }
-
-    // 3. Process Queue (One job)
-    console.log("Master Cron: Processing queue...")
-    const job = await dequeueNextJob()
-    if (job) {
-      const genResult = await generatePostsForFeed(job.feedId)
-      if (genResult.success) {
-        await distributeToSubscribers(job.feedId)
-        await markJobCompleted(job)
-        results.tasks.queueProcessing = `Processed feed ${job.feedId}`
-      } else {
-        await markJobFailed(job, genResult.error || "Generation failed")
-        results.tasks.queueProcessing = `Failed feed ${job.feedId}`
+      // 2. Process Feeds
+      console.log("Master Cron: Processing feeds...")
+      const feedResults = await processAllFeeds()
+      results.tasks.processFeeds = {
+        success: true,
+        newItems: feedResults.reduce((sum, r) => sum + r.newItems, 0)
       }
-    } else {
-      results.tasks.queueProcessing = "No jobs"
-    }
 
-    // 4. Publish Scheduled Posts
-    console.log("Master Cron: Publishing posts...")
-    await publishScheduledPosts()
-    results.tasks.publishPosts = "success"
+      // 3. Process Queue (One job)
+      console.log("Master Cron: Processing queue...")
+      const job = await dequeueNextJob()
+      if (job) {
+        const genResult = await generatePostsForFeed(job.feedId)
+        if (genResult.success) {
+          await distributeToSubscribers(job.feedId)
+          await markJobCompleted(job)
+          results.tasks.queueProcessing = `Processed feed ${job.feedId}`
+        } else {
+          await markJobFailed(job, genResult.error || "Generation failed")
+          results.tasks.queueProcessing = `Failed feed ${job.feedId}`
+        }
+      } else {
+        results.tasks.queueProcessing = "No jobs"
+      }
 
-    // 5. Cleanup
-    console.log("Master Cron: Running cleanup...")
-    await runAllCleanupJobs()
-    results.tasks.cleanup = "success"
+      // 4. Publish Scheduled Posts
+      console.log("Master Cron: Publishing posts...")
+      await publishScheduledPosts()
+      results.tasks.publishPosts = "success"
+
+      // 5. Cleanup
+      console.log("Master Cron: Running cleanup...")
+      await runAllCleanupJobs()
+      results.tasks.cleanup = "success"
+    })
 
     return NextResponse.json({ success: true, ...results })
   } catch (error) {

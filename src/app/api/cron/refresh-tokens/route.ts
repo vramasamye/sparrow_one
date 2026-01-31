@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
   try {
     console.log("Token refresh cron job started")
 
-    const results = await refreshExpiringTokens()
+    const results = await withDatabase(async () => {
+      return await refreshExpiringTokens()
+    })
 
     const successful = results.filter((r) => r.success).length
     const failed = results.filter((r) => !r.success).length
