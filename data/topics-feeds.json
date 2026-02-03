@@ -1,7 +1,7 @@
 {
   "platform_name": "AI Social Media Auto-Publishing Platform",
-  "version": "1.1",
-  "last_updated": "2026-01-28",
+  "version": "1.2",
+  "last_updated": "2026-02-03",
   "topics": [
     {
       "topic_id": "ai_ml",
@@ -10,6 +10,24 @@
       "category": "Technology",
       "update_frequency": "high",
       "feeds": [
+        {
+          "source": "Simon Willison",
+          "url": "https://simonwillison.net/atom/everything/",
+          "reliability": "high",
+          "content_type": "technical"
+        },
+        {
+          "source": "Gary Marcus",
+          "url": "https://garymarcus.substack.com/feed",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
+          "source": "Gwern Branwen",
+          "url": "https://gwern.substack.com/feed",
+          "reliability": "high",
+          "content_type": "research"
+        },
         {
           "source": "VentureBeat AI",
           "url": "https://venturebeat.com/category/ai/feed/",
@@ -62,6 +80,24 @@
       "update_frequency": "medium",
       "feeds": [
         {
+          "source": "Paul Graham",
+          "url": "http://www.aaronsw.com/2002/feeds/pgessays.rss",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
+          "source": "Steve Blank",
+          "url": "https://steveblank.com/feed/",
+          "reliability": "high",
+          "content_type": "strategy"
+        },
+        {
+          "source": "Derek Thompson",
+          "url": "https://www.theatlantic.com/feed/author/derek-thompson/",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
           "source": "Harvard Business Review",
           "url": "http://feeds.harvardbusiness.org/harvardbusiness?format=xml",
           "reliability": "high",
@@ -90,12 +126,6 @@
           "url": "http://feeds.bbci.co.uk/news/business/rss.xml",
           "reliability": "high",
           "content_type": "news"
-        },
-        {
-          "source": "Business Insider",
-          "url": "https://www.businessinsider.com/rss",
-          "reliability": "medium",
-          "content_type": "news"
         }
       ]
     },
@@ -107,14 +137,32 @@
       "update_frequency": "high",
       "feeds": [
         {
-          "source": "TechCrunch",
-          "url": "https://techcrunch.com/feed/",
+          "source": "Daring Fireball",
+          "url": "https://daringfireball.net/feeds/main",
           "reliability": "high",
-          "content_type": "news"
+          "content_type": "commentary"
         },
         {
-          "source": "TechCrunch - Startups",
-          "url": "https://techcrunch.com/category/startups/feed/",
+          "source": "Pluralistic (Cory Doctorow)",
+          "url": "https://pluralistic.net/feed/",
+          "reliability": "high",
+          "content_type": "analysis"
+        },
+        {
+          "source": "Antirez",
+          "url": "http://antirez.com/rss",
+          "reliability": "high",
+          "content_type": "technical"
+        },
+        {
+          "source": "Jeff Geerling",
+          "url": "https://www.jeffgeerling.com/blog.xml",
+          "reliability": "high",
+          "content_type": "technical"
+        },
+        {
+          "source": "TechCrunch",
+          "url": "https://techcrunch.com/feed/",
           "reliability": "high",
           "content_type": "news"
         },
@@ -182,12 +230,6 @@
           "content_type": "news"
         },
         {
-          "source": "Forbes - Fintech",
-          "url": "https://www.forbes.com/fintech/feed/",
-          "reliability": "high",
-          "content_type": "news"
-        },
-        {
           "source": "The Economist",
           "url": "https://www.economist.com/latest/rss.xml",
           "reliability": "high",
@@ -225,18 +267,6 @@
           "url": "https://contentmarketinginstitute.com/feed/",
           "reliability": "high",
           "content_type": "strategy"
-        },
-        {
-          "source": "CopyHackers",
-          "url": "https://copyhackers.com/feed/",
-          "reliability": "medium",
-          "content_type": "copywriting"
-        },
-        {
-          "source": "Marketing Land",
-          "url": "https://marketingland.com/feed/",
-          "reliability": "medium",
-          "content_type": "news"
         }
       ]
     },
@@ -260,28 +290,10 @@
           "content_type": "medical"
         },
         {
-          "source": "MindBodyGreen",
-          "url": "https://www.mindbodygreen.com/rss",
-          "reliability": "medium",
-          "content_type": "wellness"
-        },
-        {
-          "source": "Well+Good",
-          "url": "https://www.wellandgood.com/feed/",
-          "reliability": "medium",
-          "content_type": "lifestyle"
-        },
-        {
           "source": "Calm Blog",
           "url": "https://blog.calm.com/blog?format=rss",
           "reliability": "high",
           "content_type": "mindfulness"
-        },
-        {
-          "source": "Breaking Muscle",
-          "url": "https://breakingmuscle.com/feed",
-          "reliability": "medium",
-          "content_type": "fitness"
         }
       ]
     },
@@ -337,6 +349,18 @@
       "category": "Technology",
       "update_frequency": "high",
       "feeds": [
+        {
+          "source": "Krebs on Security",
+          "url": "https://krebsonsecurity.com/feed/",
+          "reliability": "high",
+          "content_type": "news"
+        },
+        {
+          "source": "Troy Hunt",
+          "url": "https://www.troyhunt.com/rss/",
+          "reliability": "high",
+          "content_type": "technical"
+        },
         {
           "source": "TechCrunch - Security",
           "url": "https://techcrunch.com/category/security/feed/",
@@ -420,12 +444,6 @@
           "url": "https://www.forbes.com/leadership/feed/",
           "reliability": "high",
           "content_type": "news"
-        },
-        {
-          "source": "Zen Habits",
-          "url": "https://zenhabits.net/feed/",
-          "reliability": "medium",
-          "content_type": "productivity"
         }
       ]
     },
@@ -436,6 +454,18 @@
       "category": "Technology",
       "update_frequency": "medium",
       "feeds": [
+        {
+          "source": "Mitchell Hashimoto",
+          "url": "https://mitchellh.com/feed.xml",
+          "reliability": "high",
+          "content_type": "leadership"
+        },
+        {
+          "source": "Armin Ronacher",
+          "url": "https://lucumr.pocoo.org/feed.atom",
+          "reliability": "high",
+          "content_type": "technical"
+        },
         {
           "source": "SaaStr",
           "url": "https://www.saastr.com/feed/",
@@ -477,8 +507,8 @@
   ],
   "metadata": {
     "total_topics": 11,
-    "total_feeds": 69,
-    "format_version": "1.1",
-    "notes": "Feeds updated January 28, 2026. Added high-relevance sources for AI, SaaS, and Sustainability."
+    "total_feeds": 64,
+    "format_version": "1.2",
+    "notes": "Feeds updated Feb 3, 2026. Added high-authority individual blogs and removed medium-reliability sources."
   }
 }

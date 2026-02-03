@@ -36,6 +36,23 @@ const SOURCE_AUTHORITY: Record<string, number> = {
   'businessinsider.com': 18,
   'forbes.com': 18,
 
+  // Influential Individual/Niche Blogs (19 points) - Elevated from Tier 5
+  'krebsonsecurity.com': 19,
+  'troyhunt.com': 19,
+  'simonwillison.net': 19,
+  'paulgraham.com': 19,
+  'daringfireball.net': 19,
+  'pluralistic.net': 19,
+  'antirez.com': 19,
+  'jeffgeerling.com': 19,
+  'mitchellh.com': 19,
+  'lucumr.pocoo.org': 19,
+  'steveblank.com': 19,
+  'gwern.net': 19,
+  'garymarcus.substack.com': 19,
+  'lcamtuf.substack.com': 19,
+  'derekthompson.org': 19,
+
   // Tier 2: Official Company Blogs (18 points)
   'openai.com': 18,
   'vercel.com': 18,
