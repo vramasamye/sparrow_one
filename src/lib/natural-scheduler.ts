@@ -462,22 +462,26 @@ export async function distributeNaturally(feedId: string): Promise<{
       }
     }
 
-    // 5. Update status to DISTRIBUTED
+    // 5. Update status based on whether posts were actually scheduled
+    const actuallyScheduled = twitterScheduled + linkedinScheduled
+    const newStatus = actuallyScheduled > 0 ? "DISTRIBUTED" : "FAILED"
+
     await prisma.generatedPost.update({
       where: { id: generatedPost.id },
       data: {
-        status: "DISTRIBUTED",
-        distributedAt: new Date(),
+        status: newStatus,
+        distributedAt: actuallyScheduled > 0 ? new Date() : null,
+        errorMessage: actuallyScheduled === 0 ? "No posts were scheduled for any subscriber" : null,
       },
     })
 
-    console.log(`✅ Natural distribution complete:`)
+    console.log(`${actuallyScheduled > 0 ? '✅' : '⚠️'} Natural distribution ${actuallyScheduled > 0 ? 'complete' : 'scheduled 0 posts'}:`)
     console.log(`   Users: ${usersScheduled}/${subscribers.length}`)
     console.log(`   Twitter: ${twitterScheduled} posts (personalized times)`)
     console.log(`   LinkedIn: ${linkedinScheduled} posts (personalized times)`)
 
     return {
-      success: true,
+      success: actuallyScheduled > 0,
       usersScheduled,
       twitterScheduled,
       linkedinScheduled,

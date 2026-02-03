@@ -152,7 +152,7 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     if (moderation.flags.hasPromoCodes) reasons.push('Contains promo codes')
     if (moderation.flags.isClickbait) reasons.push('Clickbait detected')
     if (moderation.flags.isSpam) reasons.push('Spam detected')
-    if (qualityScore < 60) reasons.push(`Low quality score (${qualityScore})`)
+    if (qualityScore < 40) reasons.push(`Low quality score (${qualityScore})`)
     reasoning = `Auto-rejected: ${reasons.join(', ')}`
   } else if (autoApprove) {
     reasoning = `Auto-approved: High quality (${qualityScore}) and safe content`
@@ -280,7 +280,7 @@ function getContentRelevanceScore(feed: any): number {
   const productReviewIndicators = [
     'best ', 'top ', ' review', 'buying guide', 'to buy',
     'tested', 'comparison', 'vs ', 'versus',
-    'deal', 'discount', 'sale', 'coupon', 'promo'
+    'discount', 'sale', 'coupon', 'promo'
   ]
 
   const isProductReview = productReviewIndicators.some(indicator =>

@@ -70,17 +70,19 @@ export async function processAllFeeds(): Promise<ProcessingResult[]> {
 export async function cleanupOldFeeds(): Promise<number> {
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-  // Delete PENDING feeds older than 24 hours (not approved)
+  // Only delete PENDING feeds that have already been scored and not approved
+  // Unscored feeds (scoredAt: null) must be kept until scoring runs
   const result = await prisma.feed.deleteMany({
     where: {
       status: "PENDING",
+      scoredAt: { not: null },
       createdAt: {
         lt: twentyFourHoursAgo
       }
     }
   })
 
-  console.log(`🗑️  Cleaned up ${result.count} old pending feeds (>24h)`)
+  console.log(`🗑️  Cleaned up ${result.count} old scored-but-pending feeds (>24h)`)
   return result.count
 }
 

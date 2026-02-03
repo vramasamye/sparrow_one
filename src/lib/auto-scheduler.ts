@@ -162,15 +162,24 @@ export async function distributeToSubscribers(feedId: string): Promise<{
   linkedinScheduled: number
   errors: string[]
 }> {
-  // Use natural scheduling by default (respects user timezone and preferences)
+  // Use natural scheduling by default, fall back to legacy if it fails
   const useLegacyScheduling = process.env.USE_LEGACY_SCHEDULING === "true"
 
   if (!useLegacyScheduling) {
-    console.log("📅 Using natural scheduling (user preferences)")
-    return await distributeNaturally(feedId)
+    try {
+      console.log("📅 Using natural scheduling (user preferences)")
+      const result = await distributeNaturally(feedId)
+      if (result.usersScheduled === 0 && result.errors.length > 0) {
+        console.log("⚠️  Natural scheduling scheduled 0 users, falling back to legacy")
+        return await distributeLegacy(feedId)
+      }
+      return result
+    } catch (error) {
+      console.log(`⚠️  Natural scheduling failed: ${error instanceof Error ? error.message : "Unknown"}. Falling back to legacy.`)
+      return await distributeLegacy(feedId)
+    }
   }
 
-  // Legacy scheduling (for backward compatibility)
   console.log("📅 Using legacy scheduling (UTC-based)")
   return await distributeLegacy(feedId)
 }
@@ -328,22 +337,26 @@ async function distributeLegacy(feedId: string): Promise<{
       }
     }
 
-    // 5. Update status to DISTRIBUTED
+    // 5. Update status based on whether posts were actually scheduled
+    const actuallyScheduled = twitterScheduled + linkedinScheduled
+    const newStatus = actuallyScheduled > 0 ? "DISTRIBUTED" : "FAILED"
+
     await prisma.generatedPost.update({
       where: { id: generatedPost.id },
       data: {
-        status: "DISTRIBUTED",
-        distributedAt: new Date()
+        status: newStatus,
+        distributedAt: actuallyScheduled > 0 ? new Date() : null,
+        errorMessage: actuallyScheduled === 0 ? "No posts were scheduled for any subscriber" : null,
       }
     })
 
-    console.log(`✅ Distribution complete:`)
+    console.log(`${actuallyScheduled > 0 ? '✅' : '⚠️'} Distribution ${actuallyScheduled > 0 ? 'complete' : 'scheduled 0 posts'}:`)
     console.log(`   Users: ${usersScheduled}/${subscribers.length}`)
     console.log(`   Twitter: ${twitterScheduled} posts`)
     console.log(`   LinkedIn: ${linkedinScheduled} posts`)
 
     return {
-      success: true,
+      success: actuallyScheduled > 0,
       usersScheduled,
       twitterScheduled,
       linkedinScheduled,
