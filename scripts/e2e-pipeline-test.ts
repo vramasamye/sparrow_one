@@ -211,7 +211,7 @@ async function e2ePipelineTest() {
       upcoming.forEach(p => {
         const mins = Math.round((p.scheduledFor.getTime() - now.getTime()) / 60000)
         const label = mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`
-        console.log(`  [in ${label.padEnd(5)}] ${p.platform.padEnd(10)} ${p.user.email.padEnd(40)} ${p.feed.title.substring(0, 40)}`)
+        console.log(`  [in ${label.padEnd(5)}] ${p.platform.padEnd(10)} ${p.user.email.padEnd(40)} ${p.feed?.title.substring(0, 40) ?? "unknown"}`)
       })
     }
 
