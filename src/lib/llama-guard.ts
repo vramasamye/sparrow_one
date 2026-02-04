@@ -15,7 +15,7 @@ import { groq } from '@ai-sdk/groq'
 
 export interface ModerationResult {
   isSafe: boolean
-  category: 'safe' | 'unsafe' | 'sales' | 'spam' | 'clickbait' | 'promotional'
+  category: 'safe' | 'unsafe' | 'sales' | 'spam' | 'clickbait' | 'promotional' | 'marketing' | 'offtopic'
   confidence: number  // 0-1
   reasoning: string
   flags: {
@@ -23,6 +23,9 @@ export interface ModerationResult {
     hasPromoCodes: boolean
     isClickbait: boolean
     isSpam: boolean
+    isMarketing: boolean
+    isOffTopic: boolean
+    moderationSkipped: boolean
   }
 }
 
@@ -42,7 +45,9 @@ export function isLlamaGuardConfigured(): boolean {
 export async function moderateContent(
   title: string,
   summary: string | null,
-  content: string | null
+  content: string | null,
+  topicName: string,
+  topicDescription: string | null
 ): Promise<ModerationResult> {
   // Validate API key is configured
   if (!isLlamaGuardConfigured()) {
@@ -61,41 +66,60 @@ Summary: ${summary || 'N/A'}
 Content Preview: ${content ? content.substring(0, 500) : 'N/A'}
 `.trim()
 
-    const prompt = `You are a content moderation system for a tech newsletter platform. Analyze this article and determine if it's safe to share.
+    const topicContext = topicDescription
+      ? `${topicName} — ${topicDescription}`
+      : topicName
+
+    const prompt = `You are a strict content moderation system for a newsletter focused on: ${topicContext}.
+
+Your job is to reject anything that is not genuinely valuable, on-topic content. Be strict — when in doubt, flag it.
 
 ${contentToCheck}
 
-CRITICAL RULES - Flag as UNSAFE if:
+REJECT (flag as unsafe) if ANY of these apply:
+
 1. Sales/Promotional Content:
    - Contains coupon/promo codes (e.g., "SAVE20", "DISCOUNT50", "CODE123")
-   - Has sales language: "Buy now", "Limited offer", "Get X% off", "Subscribe and save"
+   - Sales language: "Buy now", "Limited offer", "Get X% off", "Subscribe and save"
    - Affiliate marketing or sponsored promotions
    - Paid course/product sales with discounts
 
 2. Clickbait:
    - Sensational titles: "You won't believe...", "This one trick..."
-   - Misleading headlines
+   - Headlines that misrepresent or exaggerate the actual content
 
 3. Spam:
-   - Low-quality content
-   - Repetitive or gibberish
+   - Low-quality, repetitive, or thin content with no real informational value
+   - Gibberish or auto-generated filler
 
-ALLOWED (Mark as SAFE):
-- Open-source software releases (free)
-- Product announcements without sales pressure
-- Technical tutorials and guides
-- Engineering blog posts
-- Conference announcements
-- Research papers
+4. Marketing Content:
+   - Thought leadership articles that are primarily brand promotion
+   - Vendor blogs disguised as guides or news — the real goal is driving traffic or leads
+   - "How we built X at [Company]" posts that are really sales pitches
+   - Content designed to funnel readers toward a product or service
+   - Job-board or recruitment marketing posts
 
-Respond with ONLY this format:
-CATEGORY: [safe/unsafe/sales/clickbait/spam]
+5. Off-Topic Content (STRICT):
+   - The newsletter is specifically about: ${topicName}
+   - Reject if the article is NOT directly and specifically about ${topicName}
+   - Tangentially related content is NOT enough — it must be core to the topic
+   - General tech, business, or lifestyle content that only peripherally mentions ${topicName} should be rejected
+
+APPROVE (mark as safe) ONLY if ALL of these are true:
+- The article is genuinely and primarily about ${topicName}
+- It delivers real news, analysis, or technical insight
+- There is no sales intent, marketing angle, or off-topic drift
+
+Respond with ONLY this exact format:
+CATEGORY: [safe/unsafe/sales/clickbait/spam/marketing/offtopic]
 CONFIDENCE: [0.0-1.0]
 SALES_CONTENT: [yes/no]
 PROMO_CODES: [yes/no]
 CLICKBAIT: [yes/no]
 SPAM: [yes/no]
-REASONING: [brief explanation]`
+MARKETING: [yes/no]
+OFF_TOPIC: [yes/no]
+REASONING: [1-2 sentences. If rejecting, explain why. Always state whether this is genuinely about ${topicName}.]`
 
     const { text } = await generateText({
       model: groq('meta-llama/llama-guard-4-12b'),
@@ -110,17 +134,20 @@ REASONING: [brief explanation]`
   } catch (error) {
     console.error('Llama Guard moderation failed:', error)
 
-    // Fail-safe: if moderation fails, mark as needs review
+    // Fail-safe: moderation skipped — item goes to pending review (no auto-approve, no score-based auto-reject)
     return {
-      isSafe: true,  // Don't auto-reject on error
+      isSafe: true,
       category: 'safe',
       confidence: 0.5,
-      reasoning: 'Moderation check failed, needs manual review',
+      reasoning: 'Moderation check failed — needs manual review',
       flags: {
         isSalesContent: false,
         hasPromoCodes: false,
         isClickbait: false,
-        isSpam: false
+        isSpam: false,
+        isMarketing: false,
+        isOffTopic: false,
+        moderationSkipped: true
       }
     }
   }
@@ -138,13 +165,16 @@ function parseGuardResponse(text: string): ModerationResult {
   let promoCodes = false
   let clickbait = false
   let spam = false
+  let marketing = false
+  let offTopic = false
   let reasoning = ''
 
   for (const line of lines) {
     if (line.startsWith('CATEGORY:')) {
       const cat = line.split(':')[1].trim().toLowerCase()
       if (cat.includes('unsafe') || cat.includes('sales') ||
-          cat.includes('clickbait') || cat.includes('spam')) {
+          cat.includes('clickbait') || cat.includes('spam') ||
+          cat.includes('marketing') || cat.includes('offtopic')) {
         category = cat as ModerationResult['category']
       }
     }
@@ -163,12 +193,18 @@ function parseGuardResponse(text: string): ModerationResult {
     else if (line.startsWith('SPAM:')) {
       spam = line.toLowerCase().includes('yes')
     }
+    else if (line.startsWith('MARKETING:')) {
+      marketing = line.toLowerCase().includes('yes')
+    }
+    else if (line.startsWith('OFF_TOPIC:')) {
+      offTopic = line.toLowerCase().includes('yes')
+    }
     else if (line.startsWith('REASONING:')) {
       reasoning = line.substring('REASONING:'.length).trim()
     }
   }
 
-  const isSafe = category === 'safe' && !salesContent && !promoCodes && !clickbait && !spam
+  const isSafe = category === 'safe' && !salesContent && !promoCodes && !clickbait && !spam && !marketing && !offTopic
 
   return {
     isSafe,
@@ -179,7 +215,10 @@ function parseGuardResponse(text: string): ModerationResult {
       isSalesContent: salesContent,
       hasPromoCodes: promoCodes,
       isClickbait: clickbait,
-      isSpam: spam
+      isSpam: spam,
+      isMarketing: marketing,
+      isOffTopic: offTopic,
+      moderationSkipped: false
     }
   }
 }
@@ -253,26 +292,31 @@ export const guardRateLimiter = new LlamaGuardRateLimiter()
 export async function moderateContentSafe(
   title: string,
   summary: string | null,
-  content: string | null
+  content: string | null,
+  topicName: string,
+  topicDescription: string | null
 ): Promise<ModerationResult> {
-  // If API key not configured, skip moderation and return safe result
+  // If API key not configured, skip moderation — items will go to pending review
   if (!isLlamaGuardConfigured()) {
     console.warn('⚠️  GROQ_API_KEY not configured - skipping AI moderation')
     return {
       isSafe: true,
       category: 'safe',
-      confidence: 0.5,  // Medium confidence (no AI check performed)
-      reasoning: 'AI moderation skipped - GROQ_API_KEY not configured',
+      confidence: 0.5,
+      reasoning: 'AI moderation skipped — GROQ_API_KEY not configured',
       flags: {
         isSalesContent: false,
         hasPromoCodes: false,
         isClickbait: false,
-        isSpam: false
+        isSpam: false,
+        isMarketing: false,
+        isOffTopic: false,
+        moderationSkipped: true
       }
     }
   }
 
   return guardRateLimiter.enqueue(() =>
-    moderateContent(title, summary, content)
+    moderateContent(title, summary, content, topicName, topicDescription)
   )
 }

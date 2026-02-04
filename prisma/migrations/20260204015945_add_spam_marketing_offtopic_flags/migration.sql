@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "feeds" ADD COLUMN     "isMarketing" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "isOffTopic" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "isSpam" BOOLEAN NOT NULL DEFAULT false;

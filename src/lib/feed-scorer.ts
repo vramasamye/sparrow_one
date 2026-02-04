@@ -15,6 +15,80 @@ export interface ScoringResult {
   reasoning: string
 }
 
+// ========================================
+// CROSS-FEED DUPLICATE DETECTION
+// ========================================
+
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'shall',
+  'should', 'may', 'might', 'must', 'can', 'could', 'to', 'of', 'in',
+  'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through',
+  'during', 'before', 'after', 'above', 'below', 'between', 'out', 'off',
+  'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there',
+  'when', 'where', 'why', 'how', 'all', 'both', 'each', 'few', 'more',
+  'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
+  'same', 'so', 'than', 'too', 'very', 'just', 'because', 'but', 'and',
+  'or', 'if', 'while', 'although', 'though', 'even', 'also', 'still',
+  'already', 'yet', 'now', 'new', 'its', 'their', 'our', 'your', 'his',
+  'her', 'my', 'it', 'this', 'that', 'these', 'those', 'what', 'which',
+  'who', 'whom', 'up', 'about', 'one'
+])
+
+/** Extract meaningful words from a title (lowercase, no punctuation, no stop words) */
+function getTitleWords(title: string): Set<string> {
+  return new Set(
+    title.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 1 && !STOP_WORDS.has(w))
+  )
+}
+
+/**
+ * Overlap coefficient between two word sets.
+ * intersection / min(|A|, |B|) — catches duplicates where one title is a subset of the other.
+ */
+function overlapCoefficient(wordsA: Set<string>, wordsB: Set<string>): number {
+  if (wordsA.size === 0 || wordsB.size === 0) return 0
+  const intersection = [...wordsA].filter(w => wordsB.has(w))
+  return intersection.length / Math.min(wordsA.size, wordsB.size)
+}
+
+/**
+ * Find a cross-feed duplicate within the same topic (24h window).
+ * Skips comparison if either title has fewer than 3 meaningful words.
+ */
+async function findDuplicateFeed(
+  feed: { id: string; topicId: string; title: string }
+): Promise<{ id: string; title: string } | null> {
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+  const recentFeeds = await prisma.feed.findMany({
+    where: {
+      topicId: feed.topicId,
+      id: { not: feed.id },
+      status: { not: 'REJECTED' },
+      createdAt: { gte: twentyFourHoursAgo }
+    },
+    select: { id: true, title: true }
+  })
+
+  const currentWords = getTitleWords(feed.title)
+  if (currentWords.size < 3) return null  // Too short to compare reliably
+
+  for (const recent of recentFeeds) {
+    const recentWords = getTitleWords(recent.title)
+    if (recentWords.size < 3) continue
+
+    if (overlapCoefficient(currentWords, recentWords) >= 0.7) {
+      return recent
+    }
+  }
+
+  return null
+}
+
 /**
  * Source authority scores (whitelist)
  */
@@ -92,6 +166,37 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
   if (!feed) throw new Error('Feed not found')
 
   // ========================================
+  // PRE-CHECK: Cross-feed duplicate detection
+  // Runs before LLM to avoid wasting API calls on duplicates
+  // ========================================
+
+  const duplicate = await findDuplicateFeed(feed)
+  if (duplicate) {
+    const reasoning = `Duplicate: same story already exists as "${duplicate.title.substring(0, 60)}"`
+
+    await prisma.feed.update({
+      where: { id: feedId },
+      data: {
+        autoRejected: true,
+        qualityScore: 0,
+        scoredAt: new Date(),
+        moderationReasoning: reasoning
+      }
+    })
+
+    console.log(`  ❌ Duplicate: "${feed.title.substring(0, 40)}..." matches "${duplicate.title.substring(0, 40)}..."`)
+
+    return {
+      qualityScore: 0,
+      ruleBasedScore: 0,
+      moderationBoost: 0,
+      autoApprove: false,
+      autoReject: true,
+      reasoning
+    }
+  }
+
+  // ========================================
   // PHASE 1: RULE-BASED SCORING (0-60)
   // ========================================
 
@@ -118,7 +223,9 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
   const moderation = await moderateContentSafe(
     feed.title,
     feed.summary,
-    feed.content
+    feed.content,
+    feed.topic.name,
+    feed.topic.description
   )
 
   // Calculate moderation boost/penalty
@@ -142,22 +249,31 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
   const qualityScore = Math.max(0, Math.min(100, ruleBasedScore + moderationBoost))
 
   // Auto-rejection rules (STRICT)
+  // Score-based rejection only fires when moderation actually ran — if LLM was skipped,
+  // items fall through to pending review rather than being score-rejected blind.
   const autoReject =
     !moderation.isSafe ||
     moderation.flags.isSalesContent ||
     moderation.flags.hasPromoCodes ||
     moderation.flags.isClickbait ||
     moderation.flags.isSpam ||
-    qualityScore < 40  // Lowered from 60 to 40
+    moderation.flags.isMarketing ||
+    moderation.flags.isOffTopic ||
+    (!moderation.flags.moderationSkipped && qualityScore < 50)
 
-  // Auto-approval rules (high quality, no red flags)
+  // Auto-approval rules (VERY STRICT)
+  // Requires: moderation ran successfully, all flags clean, high quality score.
+  // If LLM was skipped for any reason, item cannot auto-approve.
   const autoApprove =
+    !moderation.flags.moderationSkipped &&
     moderation.isSafe &&
     !moderation.flags.isSalesContent &&
     !moderation.flags.hasPromoCodes &&
     !moderation.flags.isClickbait &&
     !moderation.flags.isSpam &&
-    qualityScore >= 75  // Lowered from 80 to 75
+    !moderation.flags.isMarketing &&
+    !moderation.flags.isOffTopic &&
+    qualityScore >= 82
 
   // Generate reasoning
   let reasoning = moderation.reasoning
@@ -169,7 +285,9 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     if (moderation.flags.hasPromoCodes) reasons.push('Contains promo codes')
     if (moderation.flags.isClickbait) reasons.push('Clickbait detected')
     if (moderation.flags.isSpam) reasons.push('Spam detected')
-    if (qualityScore < 40) reasons.push(`Low quality score (${qualityScore})`)
+    if (moderation.flags.isMarketing) reasons.push('Marketing content')
+    if (moderation.flags.isOffTopic) reasons.push('Off-topic')
+    if (!moderation.flags.moderationSkipped && qualityScore < 50) reasons.push(`Low quality score (${qualityScore})`)
     reasoning = `Auto-rejected: ${reasons.join(', ')}`
   } else if (autoApprove) {
     reasoning = `Auto-approved: High quality (${qualityScore}) and safe content`
@@ -199,6 +317,9 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
       isSalesContent: moderation.flags.isSalesContent,
       hasPromoCodes: moderation.flags.hasPromoCodes,
       isClickbait: moderation.flags.isClickbait,
+      isSpam: moderation.flags.isSpam,
+      isMarketing: moderation.flags.isMarketing,
+      isOffTopic: moderation.flags.isOffTopic,
 
       autoApproved: autoApprove,
       autoRejected: autoReject,

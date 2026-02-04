@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { addDays, addHours, setHours, setMinutes, startOfDay, format, getDay, startOfWeek as dateStartOfWeek } from "date-fns"
+import { addDays, setHours, setMinutes, startOfDay, format, getDay } from "date-fns"
 import { toZonedTime, fromZonedTime } from "date-fns-tz"
 
 /**
@@ -10,7 +10,7 @@ const DEFAULT_PREFERENCES = {
   twitterTimes: [8, 10, 12, 14, 17, 19],
   linkedinTimes: [9, 11, 13, 16, 18, 20],
   postsPerWeek: 7,
-  activeDays: [1, 2, 3, 4, 5], // Monday-Friday
+  activeDays: [0, 1, 2, 3, 4, 5, 6], // All days
   quietStart: null,
   quietEnd: null,
 }
@@ -75,35 +75,6 @@ function isActiveDay(date: Date, activeDays: number[]): boolean {
 }
 
 /**
- * Count posts scheduled for the current week
- */
-async function getPostsThisWeek(
-  userId: string,
-  platform: "TWITTER" | "LINKEDIN"
-): Promise<number> {
-  const now = new Date()
-  const startOfWeek = startOfDay(now)
-  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()) // Sunday
-
-  const endOfWeek = new Date(startOfWeek)
-  endOfWeek.setDate(endOfWeek.getDate() + 7) // Next Sunday
-
-  const count = await prisma.scheduledPost.count({
-    where: {
-      userId,
-      platform,
-      scheduledFor: {
-        gte: startOfWeek,
-        lt: endOfWeek,
-      },
-      status: { in: ["SCHEDULED", "PUBLISHING", "PUBLISHED"] },
-    },
-  })
-
-  return count
-}
-
-/**
  * Get next natural posting slot for a user on a platform
  * Respects user's timezone, preferred times, active days, and quiet hours
  */
@@ -121,16 +92,6 @@ export async function getNextNaturalSlot(
   const now = new Date()
   const userNow = toZonedTime(now, preferences.timezone)
   const todayInUserTz = startOfDay(userNow)
-
-  // Check posts per week limit
-  const postsThisWeek = await getPostsThisWeek(userId, platform)
-  if (postsThisWeek >= preferences.postsPerWeek) {
-    // Hit weekly limit, schedule for next week
-    const nextWeek = addDays(todayInUserTz, 7)
-    const nextSlot = setMinutes(setHours(nextWeek, preferredTimes[0]), 0)
-    // Convert back to UTC
-    return fromZonedTime(nextSlot, preferences.timezone)
-  }
 
   // Get existing scheduled posts for this user and platform
   const existingPosts = await prisma.scheduledPost.findMany({

@@ -57,7 +57,7 @@ model UserPreferences {
   postsPerWeek   Int   @default(7)  // 1-14 posts per week
 
   // Active Days (0=Sunday, 6=Saturday)
-  activeDays     Json  @default("[1, 2, 3, 4, 5]") // Mon-Fri by default
+  activeDays     Json  @default("[0, 1, 2, 3, 4, 5, 6]") // All days by default
 
   // Quiet Hours (hours in local time)
   quietStart     Int?  // e.g., 22 = 10pm
@@ -243,6 +243,9 @@ model Feed {
   isSalesContent       Boolean   @default(false)
   hasPromoCodes        Boolean   @default(false)
   isClickbait          Boolean   @default(false)
+  isSpam               Boolean   @default(false)
+  isMarketing          Boolean   @default(false)
+  isOffTopic           Boolean   @default(false)
   isTrending           Boolean   @default(false)
   autoApproved         Boolean   @default(false)
   autoRejected         Boolean   @default(false)
