@@ -9,7 +9,8 @@ export const queryKeys = {
   },
   feeds: {
     all: ["feeds"] as const,
-    byStatus: (status: string) => ["feeds", "status", status] as const,
+    stats: ["feeds", "stats"] as const,
+    byStatus: (status: string, topicId?: string) => ["feeds", "status", status, topicId] as const,
     user: (topicId?: string, page?: number) => ["feeds", "user", topicId, page] as const,
   },
   posts: {
@@ -74,6 +75,14 @@ export function useToggleTopic() {
 // ADMIN FEEDS
 // ============================================================================
 
+interface FeedStats {
+  pending: number
+  approved: number
+  rejected: number
+  published: number
+  activeFeeds: number
+}
+
 interface Feed {
   id: string
   title: string
@@ -81,7 +90,7 @@ interface Feed {
   summary: string | null
   publishedAt: string | null
   status: string
-  topic: { name: string }
+  topic: { id: string; name: string }
   rssFeed: { name: string }
   // Scoring fields
   qualityScore: number | null
@@ -100,11 +109,25 @@ interface Feed {
   scoredAt: string | null
 }
 
-export function useAdminFeeds(status: string) {
+export function useAdminFeedStats() {
   return useQuery({
-    queryKey: queryKeys.feeds.byStatus(status),
+    queryKey: queryKeys.feeds.stats,
     queryFn: async () => {
-      const response = await fetch(`/api/admin/feeds?status=${status}`)
+      const response = await fetch("/api/admin/feeds/stats")
+      if (!response.ok) throw new Error("Failed to fetch stats")
+      return response.json() as Promise<FeedStats>
+    },
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+  })
+}
+
+export function useAdminFeeds(status: string, topicId?: string) {
+  return useQuery({
+    queryKey: queryKeys.feeds.byStatus(status, topicId),
+    queryFn: async () => {
+      const params = new URLSearchParams({ status })
+      if (topicId) params.set("topicId", topicId)
+      const response = await fetch(`/api/admin/feeds?${params.toString()}`)
       if (!response.ok) throw new Error("Failed to fetch feeds")
       const data = await response.json()
       return data.feeds as Feed[]
@@ -136,6 +159,7 @@ export function useApproveFeed() {
     },
     onSuccess: (_, { action }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.feeds.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.feeds.stats })
       toast.success(`Feed ${action}d successfully`)
     },
     onError: () => {
@@ -160,6 +184,7 @@ export function useBulkApproveFeed() {
     },
     onSuccess: (data, { action }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.feeds.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.feeds.stats })
       toast.success(`${data.count} feeds ${action}d successfully`)
     },
     onError: (_, { action }) => {

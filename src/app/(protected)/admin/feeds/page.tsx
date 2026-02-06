@@ -1,5 +1,3 @@
-import { Suspense } from "react"
-
 import { FeedList } from "./feed-list"
 import { FeedStats } from "./feed-stats"
 
@@ -13,13 +11,8 @@ export default function AdminFeedsPage() {
         </p>
       </div>
 
-      <Suspense fallback={<div>Loading stats…</div>}>
-        <FeedStats />
-      </Suspense>
-
-      <Suspense fallback={<div>Loading feeds…</div>}>
-        <FeedList />
-      </Suspense>
+      <FeedStats />
+      <FeedList />
     </div>
   )
 }

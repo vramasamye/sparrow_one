@@ -13,8 +13,9 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const status = searchParams.get("status") || "PENDING"
+  const topicId = searchParams.get("topicId")
   const page = parseInt(searchParams.get("page") || "1")
-  const limit = parseInt(searchParams.get("limit") || "20")
+  const limit = parseInt(searchParams.get("limit") || "50")
   const skip = (page - 1) * limit
 
   try {
@@ -23,6 +24,11 @@ export async function GET(request: Request) {
 
     const whereClause: any = {
       status: status as "PENDING" | "APPROVED" | "REJECTED" | "PUBLISHED",
+    }
+
+    // Apply topic filter if provided
+    if (topicId) {
+      whereClause.topicId = topicId
     }
 
     // Apply 24h filter only for PENDING feeds
@@ -42,7 +48,7 @@ export async function GET(request: Request) {
           summary: true,
           publishedAt: true,
           status: true,
-          topic: { select: { name: true } },
+          topic: { select: { id: true, name: true } },
           rssFeed: { select: { name: true } },
           // Scoring fields
           qualityScore: true,
