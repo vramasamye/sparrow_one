@@ -4,7 +4,7 @@
  * Combines rule-based scoring + Llama Guard moderation with topic relevance as the dominant factor.
  *
  * Scoring budget:
- *   Rule-based (max ~45):  Source authority (0-20) + Recency (0-15) + Metadata (0-10) + Content signals (-15 to +5)
+ *   Rule-based (max ~45):  Source authority (0-20) + Recency (0-15) + Metadata (0-10) + Content signals (-8 to +5)
  *   LLM topic relevance:   0-30 points (from TOPIC_RELEVANCE 1-10 score)
  *   LLM moderation boost:  -60 to +15
  *   Total:                 0-100 (clamped)
@@ -12,13 +12,13 @@
  * Auto-reject triggers:
  *   - Any safety/quality flag (sales, sponsored, clickbait, spam, marketing, off-topic)
  *   - Rule-based sponsored content detection
- *   - LLM topic relevance < 7 (not focused enough on the topic)
- *   - Quality score < 50 (when moderation ran)
+ *   - LLM topic relevance < 5 (clearly not about the topic)
+ *   - Quality score < 40 (when moderation ran)
  *
  * Auto-approve requires:
  *   - All flags clean
- *   - LLM topic relevance >= 8
- *   - Quality score >= 85
+ *   - LLM topic relevance >= 7
+ *   - Quality score >= 75
  */
 
 import { prisma } from './prisma'
@@ -352,7 +352,7 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
 
   const qualityScore = Math.max(0, Math.min(100, ruleBasedScore + topicRelevancePoints + moderationBoost))
 
-  // Auto-rejection rules (STRICT)
+  // Auto-rejection rules — only reject clearly bad content; borderline goes to pending review
   const autoReject =
     !moderation.isSafe ||
     moderation.flags.isSalesContent ||
@@ -362,13 +362,12 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     moderation.flags.isMarketing ||
     moderation.flags.isSponsored ||
     moderation.flags.isOffTopic ||
-    // Topic relevance gate: LLM says it's not focused enough on the topic
-    (!moderation.flags.moderationSkipped && moderation.topicRelevanceScore < 7) ||
+    // Topic relevance gate: clearly not about the topic
+    (!moderation.flags.moderationSkipped && moderation.topicRelevanceScore < 5) ||
     // Score-based rejection only when moderation ran
-    (!moderation.flags.moderationSkipped && qualityScore < 50)
+    (!moderation.flags.moderationSkipped && qualityScore < 40)
 
-  // Auto-approval rules (VERY STRICT)
-  // Requires: moderation ran, all flags clean, high topic relevance, high quality score.
+  // Auto-approval rules — good content from known sources
   const autoApprove =
     !moderation.flags.moderationSkipped &&
     moderation.isSafe &&
@@ -379,8 +378,8 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     !moderation.flags.isMarketing &&
     !moderation.flags.isSponsored &&
     !moderation.flags.isOffTopic &&
-    moderation.topicRelevanceScore >= 8 &&
-    qualityScore >= 85
+    moderation.topicRelevanceScore >= 7 &&
+    qualityScore >= 75
 
   // Generate reasoning
   let reasoning = moderation.reasoning
@@ -395,10 +394,10 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     if (moderation.flags.isMarketing) reasons.push('Marketing content')
     if (moderation.flags.isSponsored) reasons.push('Sponsored/ad content')
     if (moderation.flags.isOffTopic) reasons.push('Off-topic')
-    if (!moderation.flags.moderationSkipped && moderation.topicRelevanceScore < 7) {
+    if (!moderation.flags.moderationSkipped && moderation.topicRelevanceScore < 5) {
       reasons.push(`Low topic relevance (${moderation.topicRelevanceScore}/10)`)
     }
-    if (!moderation.flags.moderationSkipped && qualityScore < 50) reasons.push(`Low quality score (${qualityScore})`)
+    if (!moderation.flags.moderationSkipped && qualityScore < 40) reasons.push(`Low quality score (${qualityScore})`)
     reasoning = `Auto-rejected: ${reasons.join(', ')}`
   } else if (autoApprove) {
     reasoning = `Auto-approved: High quality (${qualityScore}), topic relevance ${moderation.topicRelevanceScore}/10`
@@ -491,9 +490,9 @@ function getMetadataScore(feed: any): number {
 }
 
 /**
- * Content Signal Score (-15 to +5, clamped 0-10)
+ * Content Signal Score (-8 to +5, clamped 0-10)
  *
- * Penalty-focused: penalizes product reviews, listicles, and ad-like content.
+ * Moderate penalties for buying guides and ad-like content.
  * No generic keyword bonuses — topic relevance is handled by the LLM.
  * Only small bonus for substantial long-form content (depth indicator).
  */
@@ -503,19 +502,18 @@ function getContentSignalScore(feed: any): number {
 
   let score = 5  // Base score
 
-  // PENALTY: Product reviews & buying guides (-15 points)
+  // PENALTY: Product reviews & buying guides (-8 points)
   const reviewIndicators = [
-    'best ', 'top ', ' review', 'buying guide', 'to buy',
-    'tested', 'comparison', 'vs ', 'versus',
+    'buying guide', 'to buy',
     'discount', 'sale', 'coupon', 'promo',
     '% off', 'save $', 'free trial', 'deal of the day'
   ]
 
-  if (reviewIndicators.some(i => title.includes(i) || summary.includes(i))) score -= 15
+  if (reviewIndicators.some(i => title.includes(i) || summary.includes(i))) score -= 8
 
-  // PENALTY: Listicles (-10 points)
+  // PENALTY: Listicles (-5 points)
   const listPattern = /^\d+\s+(best|top|ways|reasons|tips|things|tools|apps|must|essential|favorite)/i
-  if (listPattern.test(title)) score -= 10
+  if (listPattern.test(title)) score -= 5
 
   // BONUS: Substantial long-form content (+3 points)
   // Longer content tends to have more depth and insight

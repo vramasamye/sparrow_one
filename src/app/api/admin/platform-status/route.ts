@@ -8,7 +8,7 @@ import { getDetailedRateLimitStatus, MODEL_LIMITS } from "@/lib/rate-limiter"
 export const dynamic = "force-dynamic"
 
 const TRACKED_MODELS = [
-  { id: "meta-llama/llama-guard-4-12b", label: "Llama Guard 4", purpose: "Content Moderation" },
+  { id: "moonshotai/kimi-k2.5", label: "Kimi K2.5 (NVIDIA)", purpose: "Content Scoring" },
   { id: "moonshotai/kimi-k2-instruct", label: "Kimi K2 Instruct", purpose: "Post Generation" },
 ]
 

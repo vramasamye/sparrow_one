@@ -1,17 +1,24 @@
 /**
- * Llama Guard 4 Content Moderation
+ * Content Moderation & Scoring
  *
- * Uses Groq's meta-llama/llama-guard-4-12b model for content filtering
+ * Uses NVIDIA API with moonshotai/kimi-k2.5 for content quality scoring
+ * and topic relevance classification.
  *
- * RATE LIMITS (STRICT):
- * - RPM: 30 (1 request every 2 seconds)
- * - RPD: 14,400
- * - TPM: 15,000
- * - TPD: 500,000
+ * Previously used Groq's Llama Guard 4 — which was a safety-only model
+ * that couldn't follow structured classification prompts reliably.
+ * Kimi K2.5 is a general-purpose model that handles nuanced scoring well.
  */
 
 import { generateText } from 'ai'
-import { groq } from '@ai-sdk/groq'
+import { createOpenAI } from '@ai-sdk/openai'
+
+// NVIDIA API provider (OpenAI-compatible)
+const nvidia = createOpenAI({
+  apiKey: process.env.NVIDIA_API_KEY || '',
+  baseURL: 'https://integrate.api.nvidia.com/v1',
+})
+
+const SCORING_MODEL = 'moonshotai/kimi-k2.5'
 
 export interface ModerationResult {
   isSafe: boolean
@@ -32,17 +39,16 @@ export interface ModerationResult {
 }
 
 /**
- * Check if Llama Guard is properly configured
+ * Check if the scoring model API is properly configured
  */
 export function isLlamaGuardConfigured(): boolean {
-  const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS
-  return !!apiKey
+  return !!process.env.NVIDIA_API_KEY
 }
 
 /**
- * Moderate content using Llama Guard 4
+ * Score and moderate content using NVIDIA Kimi K2.5
  *
- * @throws Error if GROQ_API_KEY is not configured
+ * @throws Error if NVIDIA_API_KEY is not configured
  */
 export async function moderateContent(
   title: string,
@@ -51,11 +57,10 @@ export async function moderateContent(
   topicName: string,
   topicDescription: string | null
 ): Promise<ModerationResult> {
-  // Validate API key is configured
   if (!isLlamaGuardConfigured()) {
     throw new Error(
-      'GROQ_API_KEY is not configured. Please add GROQ_API_KEY to your .env file. ' +
-      'Get your API key from: https://console.groq.com/keys'
+      'NVIDIA_API_KEY is not configured. Please add NVIDIA_API_KEY to your .env file. ' +
+      'Get your API key from: https://build.nvidia.com/'
     )
   }
 
@@ -72,75 +77,62 @@ Content Preview: ${content ? content.substring(0, 500) : 'N/A'}
       ? `${topicName} — ${topicDescription}`
       : topicName
 
-    const prompt = `You are an extremely strict content quality gate for a curated newsletter focused ONLY on: ${topicContext}.
+    const prompt = `You are a content quality filter for a curated newsletter about: ${topicContext}.
 
-Your PRIMARY job is to ensure ONLY genuinely topic-focused, high-quality content passes through. You are a gatekeeper — when in doubt, REJECT. Quality over quantity.
+Your job is to score content for topic relevance and filter out spam, ads, and promotional content. Be fair and balanced — approve good content that is relevant to the topic, even if it's not perfect.
 
 ${contentToCheck}
 
 === REJECTION CRITERIA ===
-REJECT (flag as unsafe) if ANY of these apply:
+REJECT (flag as unsafe) if ANY of these clearly apply:
 
 1. Sales/Promotional Content:
-   - Contains coupon/promo codes (e.g., "SAVE20", "DISCOUNT50", "CODE123")
-   - Sales language: "Buy now", "Limited offer", "Get X% off", "Subscribe and save"
+   - Contains coupon/promo codes (e.g., "SAVE20", "DISCOUNT50")
+   - Aggressive sales language: "Buy now", "Limited offer", "Get X% off"
    - Affiliate marketing or sponsored promotions
-   - Product launches written to drive purchases rather than inform
    - Paid course/product sales with pricing or discounts
 
 2. Sponsored/Ad Content:
    - Sponsored posts, partner content, advertorials, native advertising
    - "Brought to you by", "In partnership with", "Presented by"
    - Press releases that are thinly veiled advertisements
-   - Product announcements that read like ads rather than news
-   - Content from a company primarily promoting their own product/service
-   - "Why we built X" or "Introducing X" posts from product companies
 
 3. Clickbait:
-   - Sensational titles: "You won't believe...", "This one trick...", "Mind-blowing..."
-   - Headlines that misrepresent or exaggerate the actual content
-   - Emotional manipulation for clicks, outrage bait
+   - Sensational titles: "You won't believe...", "This one trick..."
+   - Headlines that clearly misrepresent the content
+   - Outrage bait with no substance
 
 4. Spam:
-   - Low-quality, repetitive, or thin content with no real informational value
+   - Low-quality, repetitive, or thin content with no informational value
    - Gibberish or auto-generated filler
-   - Aggregated content with no original insight or analysis
 
 5. Marketing Content:
-   - Thought leadership articles that are primarily brand/company promotion
-   - Vendor blogs disguised as guides or news — the real goal is driving traffic/leads
-   - "How we built X at [Company]" posts that are really sales pitches
-   - Content designed to funnel readers toward a product, tool, or service
-   - Job-board, recruitment, or hiring marketing posts
-   - "Why you should use [product]" or "[Product] vs [Product]" comparison marketing
-   - Listicles of tools/products ("Top 10 tools for X") — these are marketing
+   - Content whose PRIMARY purpose is selling a product or service
+   - Vendor blogs where the real goal is driving sales leads, not informing
+   - Job-board or recruitment marketing
+   - NOTE: Engineering blog posts explaining how something was built are NOT marketing — they are valuable technical content even if from a company blog
 
-6. Off-Topic Content (VERY STRICT — this is the most important check):
-   - The newsletter is specifically and ONLY about: ${topicName}
-   - The article MUST be directly, specifically, and primarily about ${topicName}
-   - Tangentially related content is NOT enough — reject it
-   - General tech/business/lifestyle content that merely mentions ${topicName} is NOT enough
-   - If the article covers multiple topics and ${topicName} is not the PRIMARY focus, reject it
-   - If a reader subscribed ONLY for ${topicName} would find this irrelevant or loosely related, reject it
-   - If the article could reasonably be published in a newsletter about a DIFFERENT topic, reject it
-   - Peripheral mentions, analogies, or passing references to ${topicName} do NOT count
+6. Off-Topic Content:
+   - The article should be meaningfully related to ${topicName}
+   - Content that has nothing to do with ${topicName} should be rejected
+   - However, articles that cover ${topicName} as one of several topics are acceptable if ${topicName} is a significant part
+   - Industry news, trends, and analysis related to ${topicName} are on-topic
 
 === APPROVAL CRITERIA ===
-APPROVE (mark as safe) ONLY if ALL of these are true:
-- The article is genuinely, primarily, and deeply about ${topicName}
-- It delivers real news, analysis, research, or technical insight
-- There is ZERO sales intent, marketing angle, sponsorship, or promotional drift
-- A reader subscribed specifically for ${topicName} content would find this highly relevant and valuable
-- The content has substance — not just a headline or a few sentences
+APPROVE (mark as safe) if the article:
+- Is meaningfully about or related to ${topicName}
+- Delivers news, analysis, research, tutorials, or technical insight
+- Is not primarily a sales pitch or advertisement
+- Has substance and informational value
 
 === TOPIC RELEVANCE SCORING ===
-Rate how relevant and focused this article is to ${topicName} on a scale of 1-10:
-1-3: Not about ${topicName}, or only mentions it in passing
-4-5: Somewhat related but not focused on ${topicName}, or covers it as a minor part
-6: Related but lacks depth or focus on ${topicName} specifically
+Rate how relevant this article is to ${topicName} on a scale of 1-10:
+1-2: Not about ${topicName} at all
+3-4: Barely related, only mentions ${topicName} in passing
+5-6: Somewhat related to ${topicName} but not the main focus
 7: Primarily about ${topicName} with reasonable depth
-8: Strongly focused on ${topicName} with good depth and insight
-9-10: Deeply and exclusively about ${topicName}, highly valuable for a ${topicName}-focused audience
+8: Strongly focused on ${topicName} with good insight
+9-10: Deeply and specifically about ${topicName}, highly valuable
 
 Respond with ONLY this exact format:
 CATEGORY: [safe/unsafe/sales/clickbait/spam/marketing/offtopic/sponsored]
@@ -153,21 +145,23 @@ SPAM: [yes/no]
 MARKETING: [yes/no]
 SPONSORED: [yes/no]
 OFF_TOPIC: [yes/no]
-REASONING: [1-2 sentences. State whether this is genuinely about ${topicName} and why you approved/rejected.]`
+REASONING: [1-2 sentences. State whether this is relevant to ${topicName} and why you approved/rejected.]`
 
     const { text } = await generateText({
-      model: groq('meta-llama/llama-guard-4-12b'),
+      model: nvidia(SCORING_MODEL),
       prompt,
-      temperature: 0.2,  // Low temperature for consistent moderation
+      temperature: 0.2,
     })
 
-    // Parse the response
+    // Log raw response for debugging
+    console.log(`  🤖 Model response: ${text.substring(0, 200)}`)
+
     return parseGuardResponse(text)
 
   } catch (error) {
-    console.error('Llama Guard moderation failed:', error)
+    console.error('Content moderation failed:', error)
 
-    // Fail-safe: moderation skipped — item goes to pending review (no auto-approve, no score-based auto-reject)
+    // Fail-safe: moderation skipped — item goes to pending review
     return {
       isSafe: true,
       category: 'safe',
@@ -189,7 +183,7 @@ REASONING: [1-2 sentences. State whether this is genuinely about ${topicName} an
 }
 
 /**
- * Parse Llama Guard response
+ * Parse structured moderation response
  */
 function parseGuardResponse(text: string): ModerationResult {
   const lines = text.split('\n').map(l => l.trim())
@@ -275,14 +269,14 @@ function parseGuardResponse(text: string): ModerationResult {
 }
 
 /**
- * Rate limiter for Llama Guard API
- * Ensures we stay under 30 RPM limit
+ * Rate limiter for scoring API
+ * Enforces minimum interval between requests
  */
 export class LlamaGuardRateLimiter {
   private queue: Array<() => Promise<any>> = []
   private processing = false
   private lastRequestTime = 0
-  private readonly minInterval = 2000  // 2 seconds between requests (30 RPM)
+  private readonly minInterval = 1000  // 1 second between requests
 
   async enqueue<T>(fn: () => Promise<T>): Promise<T> {
     return new Promise((resolve, reject) => {
@@ -310,7 +304,6 @@ export class LlamaGuardRateLimiter {
     this.processing = true
     const fn = this.queue.shift()!
 
-    // Enforce rate limit: wait 2 seconds since last request
     const now = Date.now()
     const timeSinceLastRequest = now - this.lastRequestTime
     const waitTime = Math.max(0, this.minInterval - timeSinceLastRequest)
@@ -321,10 +314,8 @@ export class LlamaGuardRateLimiter {
 
     this.lastRequestTime = Date.now()
 
-    // Execute the function
     await fn()
 
-    // Process next item
     this.processQueue()
   }
 
@@ -347,14 +338,13 @@ export async function moderateContentSafe(
   topicName: string,
   topicDescription: string | null
 ): Promise<ModerationResult> {
-  // If API key not configured, skip moderation — items will go to pending review
   if (!isLlamaGuardConfigured()) {
-    console.warn('⚠️  GROQ_API_KEY not configured - skipping AI moderation')
+    console.warn('⚠️  NVIDIA_API_KEY not configured - skipping AI moderation')
     return {
       isSafe: true,
       category: 'safe',
       confidence: 0.5,
-      reasoning: 'AI moderation skipped — GROQ_API_KEY not configured',
+      reasoning: 'AI moderation skipped — NVIDIA_API_KEY not configured',
       topicRelevanceScore: 5,
       flags: {
         isSalesContent: false,

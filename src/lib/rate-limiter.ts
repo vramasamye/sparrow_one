@@ -28,6 +28,12 @@ export const MODEL_LIMITS: Record<string, ModelLimits> = {
     tpm: 15000,     // 15K tokens per minute
     tpd: 500000,    // 500K tokens per day
   },
+  "moonshotai/kimi-k2.5": {
+    rpm: 60,        // NVIDIA API — generous limits
+    rpd: 50000,     // 50K requests per day
+    tpm: 30000,     // 30K tokens per minute
+    tpd: 1000000,   // 1M tokens per day
+  },
   // Default fallback limits (conservative)
   "default": {
     rpm: 10,
