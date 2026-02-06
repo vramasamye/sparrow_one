@@ -23,6 +23,9 @@ export const queryKeys = {
   platformStatus: {
     all: ["platform", "status"] as const,
   },
+  preferences: {
+    all: ["preferences"] as const,
+  },
 }
 
 // ============================================================================
@@ -518,6 +521,84 @@ export function useDeleteFeed() {
     },
     onError: () => {
       toast.error("Failed to delete RSS feed. Please try again.")
+    },
+  })
+}
+
+// ============================================================================
+// USER PREFERENCES
+// ============================================================================
+
+export interface UserPreferences {
+  id: string
+  userId: string
+  timezone: string
+  twitterTimes: number[]
+  linkedinTimes: number[]
+  postsPerWeek: number
+  activeDays: number[]
+  quietStart: number | null
+  quietEnd: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export function useUserPreferences() {
+  return useQuery({
+    queryKey: queryKeys.preferences.all,
+    queryFn: async () => {
+      const response = await fetch("/api/user/preferences")
+      if (!response.ok) throw new Error("Failed to fetch preferences")
+      return response.json() as Promise<UserPreferences>
+    },
+  })
+}
+
+export function useUpdatePreferences() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (data: Partial<Omit<UserPreferences, "id" | "userId" | "createdAt" | "updatedAt">>) => {
+      const response = await fetch("/api/user/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to update preferences")
+      }
+      return response.json() as Promise<UserPreferences>
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.all })
+      toast.success("Preferences saved")
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to save preferences")
+    },
+  })
+}
+
+export function useResetPreferences() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/user/preferences/reset", {
+        method: "POST",
+      })
+
+      if (!response.ok) throw new Error("Failed to reset preferences")
+      return response.json() as Promise<UserPreferences>
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.all })
+      toast.success("Preferences reset to defaults")
+    },
+    onError: () => {
+      toast.error("Failed to reset preferences")
     },
   })
 }

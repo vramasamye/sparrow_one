@@ -10,6 +10,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 import { ConnectButton, DisconnectButton } from "./connect-buttons"
+import { PostingPreferences } from "./posting-preferences"
 
 // Check which OAuth providers are configured
 const twitterConfigured = !!(process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET)
@@ -208,35 +209,7 @@ export default async function SettingsPage() {
       </Card>
 
       {/* Posting Preferences */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Posting Preferences</CardTitle>
-          <CardDescription>Configure how your posts are scheduled and published</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="font-medium">Posts per day</h4>
-                <p className="text-sm text-muted-foreground">
-                  Maximum posts per platform per day
-                </p>
-              </div>
-              <Badge variant="outline">6 posts</Badge>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="font-medium">Posting times</h4>
-                <p className="text-sm text-muted-foreground">
-                  Optimal times are automatically selected
-                </p>
-              </div>
-              <Badge variant="outline">Auto</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <PostingPreferences />
 
       {/* Danger Zone */}
       <Card className="border-destructive/50">
