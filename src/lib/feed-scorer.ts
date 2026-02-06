@@ -1,15 +1,34 @@
 /**
  * Feed Scoring System
- * Combines rule-based scoring + Llama Guard moderation
+ *
+ * Combines rule-based scoring + Llama Guard moderation with topic relevance as the dominant factor.
+ *
+ * Scoring budget:
+ *   Rule-based (max ~45):  Source authority (0-20) + Recency (0-15) + Metadata (0-10) + Content signals (-15 to +5)
+ *   LLM topic relevance:   0-30 points (from TOPIC_RELEVANCE 1-10 score)
+ *   LLM moderation boost:  -60 to +15
+ *   Total:                 0-100 (clamped)
+ *
+ * Auto-reject triggers:
+ *   - Any safety/quality flag (sales, sponsored, clickbait, spam, marketing, off-topic)
+ *   - Rule-based sponsored content detection
+ *   - LLM topic relevance < 7 (not focused enough on the topic)
+ *   - Quality score < 50 (when moderation ran)
+ *
+ * Auto-approve requires:
+ *   - All flags clean
+ *   - LLM topic relevance >= 8
+ *   - Quality score >= 85
  */
 
 import { prisma } from './prisma'
 import { moderateContentSafe } from './llama-guard'
 
 export interface ScoringResult {
-  qualityScore: number      // 0-100
-  ruleBasedScore: number    // 0-50
-  moderationBoost: number   // -50 to +50
+  qualityScore: number        // 0-100
+  ruleBasedScore: number      // 0-45
+  topicRelevanceScore: number // 1-10 from LLM
+  moderationBoost: number     // -60 to +45
   autoApprove: boolean
   autoReject: boolean
   reasoning: string
@@ -151,6 +170,55 @@ const SOURCE_AUTHORITY: Record<string, number> = {
   // Tier 5: Individual Blogs (10 points) - default
 }
 
+// ========================================
+// RULE-BASED SPONSORED/AD CONTENT DETECTION
+// ========================================
+
+const SPONSORED_PATTERNS = [
+  'sponsored', 'sponsor', 'paid post', 'paid partnership',
+  'partner content', 'advertisement', 'advertorial',
+  'brought to you by', 'in partnership with', 'presented by',
+  'paid promotion', '[ad]', '(ad)', 'special promotion',
+  'promotional feature', 'branded content', 'native advertising'
+]
+
+const AD_SALES_PATTERNS = [
+  'subscribe now', 'sign up now', 'limited time offer', 'act now',
+  'exclusive offer', 'giveaway', 'flash sale', 'clearance',
+  'order now', 'shop now', 'buy now', 'add to cart',
+  'use code', 'promo code', 'discount code', 'coupon code',
+  '% off', 'save $', 'free trial', 'money back guarantee',
+  'special deal', 'best price', 'lowest price', 'price drop'
+]
+
+/**
+ * Detect sponsored/ad content from title and summary (rule-based pre-filter).
+ * Runs before LLM to reject obvious promotional content without wasting API calls.
+ */
+function detectSponsoredOrAdContent(title: string, summary: string | null): {
+  isSponsored: boolean
+  isAd: boolean
+  reason: string | null
+} {
+  const titleLower = title.toLowerCase()
+  const summaryLower = (summary || '').toLowerCase()
+  const combined = `${titleLower} ${summaryLower}`
+
+  for (const pattern of SPONSORED_PATTERNS) {
+    if (combined.includes(pattern)) {
+      return { isSponsored: true, isAd: false, reason: `Sponsored content detected: "${pattern}"` }
+    }
+  }
+
+  for (const pattern of AD_SALES_PATTERNS) {
+    if (combined.includes(pattern)) {
+      return { isSponsored: false, isAd: true, reason: `Ad/sales content detected: "${pattern}"` }
+    }
+  }
+
+  return { isSponsored: false, isAd: false, reason: null }
+}
+
 /**
  * Score a feed
  */
@@ -189,6 +257,7 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     return {
       qualityScore: 0,
       ruleBasedScore: 0,
+      topicRelevanceScore: 0,
       moderationBoost: 0,
       autoApprove: false,
       autoReject: true,
@@ -197,7 +266,41 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
   }
 
   // ========================================
-  // PHASE 1: RULE-BASED SCORING (0-60)
+  // PRE-CHECK: Rule-based sponsored/ad detection
+  // Rejects obvious promotional content before hitting the LLM
+  // ========================================
+
+  const sponsoredCheck = detectSponsoredOrAdContent(feed.title, feed.summary)
+  if (sponsoredCheck.isSponsored || sponsoredCheck.isAd) {
+    const reasoning = `Auto-rejected: ${sponsoredCheck.reason}`
+
+    await prisma.feed.update({
+      where: { id: feedId },
+      data: {
+        autoRejected: true,
+        qualityScore: 0,
+        isSalesContent: sponsoredCheck.isAd,
+        isMarketing: sponsoredCheck.isSponsored,
+        scoredAt: new Date(),
+        moderationReasoning: reasoning
+      }
+    })
+
+    console.log(`  ❌ ${sponsoredCheck.isSponsored ? 'Sponsored' : 'Ad'}: "${feed.title.substring(0, 50)}..."`)
+
+    return {
+      qualityScore: 0,
+      ruleBasedScore: 0,
+      topicRelevanceScore: 0,
+      moderationBoost: 0,
+      autoApprove: false,
+      autoReject: true,
+      reasoning
+    }
+  }
+
+  // ========================================
+  // PHASE 1: RULE-BASED SCORING (0-45)
   // ========================================
 
   // 1. Source Authority (0-20)
@@ -209,10 +312,10 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
   // 3. Metadata Quality (0-10)
   const metadataScore = getMetadataScore(feed)
 
-  // 4. Content Relevance (0-15) - NEW!
-  const relevanceScore = getContentRelevanceScore(feed)
+  // 4. Content Signals (-15 to +5, clamped 0-10) — penalty-focused, no generic keyword bonuses
+  const contentSignalScore = getContentSignalScore(feed)
 
-  const ruleBasedScore = sourceScore + recencyScore + metadataScore + relevanceScore
+  const ruleBasedScore = sourceScore + recencyScore + metadataScore + contentSignalScore
 
   // ========================================
   // PHASE 2: LLAMA GUARD MODERATION
@@ -228,29 +331,28 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     feed.topic.description
   )
 
+  // Topic relevance from LLM (1-10 scaled to 0-30 points)
+  // This is the single biggest scoring factor — ensures topic focus dominates
+  const topicRelevancePoints = Math.round(((moderation.topicRelevanceScore - 1) / 9) * 30)
+
   // Calculate moderation boost/penalty
   let moderationBoost = 0
 
   if (!moderation.isSafe) {
-    // Heavy penalty for unsafe content
+    // Heavy penalty for unsafe/flagged content
     moderationBoost = -60
   } else {
-    // Boost for high-confidence safe content
-    // 0.5 confidence = +0 points
-    // 0.8 confidence = +15 points
-    // 1.0 confidence = +25 points
-    moderationBoost = Math.round((moderation.confidence - 0.5) * 50)
+    // Modest boost for high-confidence safe content (max +15)
+    moderationBoost = Math.round((moderation.confidence - 0.5) * 30)
   }
 
   // ========================================
   // PHASE 3: FINAL SCORE & DECISION
   // ========================================
 
-  const qualityScore = Math.max(0, Math.min(100, ruleBasedScore + moderationBoost))
+  const qualityScore = Math.max(0, Math.min(100, ruleBasedScore + topicRelevancePoints + moderationBoost))
 
   // Auto-rejection rules (STRICT)
-  // Score-based rejection only fires when moderation actually ran — if LLM was skipped,
-  // items fall through to pending review rather than being score-rejected blind.
   const autoReject =
     !moderation.isSafe ||
     moderation.flags.isSalesContent ||
@@ -258,12 +360,15 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     moderation.flags.isClickbait ||
     moderation.flags.isSpam ||
     moderation.flags.isMarketing ||
+    moderation.flags.isSponsored ||
     moderation.flags.isOffTopic ||
+    // Topic relevance gate: LLM says it's not focused enough on the topic
+    (!moderation.flags.moderationSkipped && moderation.topicRelevanceScore < 7) ||
+    // Score-based rejection only when moderation ran
     (!moderation.flags.moderationSkipped && qualityScore < 50)
 
   // Auto-approval rules (VERY STRICT)
-  // Requires: moderation ran successfully, all flags clean, high quality score.
-  // If LLM was skipped for any reason, item cannot auto-approve.
+  // Requires: moderation ran, all flags clean, high topic relevance, high quality score.
   const autoApprove =
     !moderation.flags.moderationSkipped &&
     moderation.isSafe &&
@@ -272,8 +377,10 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     !moderation.flags.isClickbait &&
     !moderation.flags.isSpam &&
     !moderation.flags.isMarketing &&
+    !moderation.flags.isSponsored &&
     !moderation.flags.isOffTopic &&
-    qualityScore >= 82
+    moderation.topicRelevanceScore >= 8 &&
+    qualityScore >= 85
 
   // Generate reasoning
   let reasoning = moderation.reasoning
@@ -286,13 +393,17 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     if (moderation.flags.isClickbait) reasons.push('Clickbait detected')
     if (moderation.flags.isSpam) reasons.push('Spam detected')
     if (moderation.flags.isMarketing) reasons.push('Marketing content')
+    if (moderation.flags.isSponsored) reasons.push('Sponsored/ad content')
     if (moderation.flags.isOffTopic) reasons.push('Off-topic')
+    if (!moderation.flags.moderationSkipped && moderation.topicRelevanceScore < 7) {
+      reasons.push(`Low topic relevance (${moderation.topicRelevanceScore}/10)`)
+    }
     if (!moderation.flags.moderationSkipped && qualityScore < 50) reasons.push(`Low quality score (${qualityScore})`)
     reasoning = `Auto-rejected: ${reasons.join(', ')}`
   } else if (autoApprove) {
-    reasoning = `Auto-approved: High quality (${qualityScore}) and safe content`
+    reasoning = `Auto-approved: High quality (${qualityScore}), topic relevance ${moderation.topicRelevanceScore}/10`
   } else {
-    reasoning = `Pending review: Score ${qualityScore}, ${moderation.reasoning}`
+    reasoning = `Pending review: Score ${qualityScore}, topic relevance ${moderation.topicRelevanceScore}/10, ${moderation.reasoning}`
   }
 
   // ========================================
@@ -310,15 +421,15 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
       // Moderation results
       moderationScore: moderation.confidence,
       moderationCategory: moderation.category,
-      moderationReasoning: moderation.reasoning,
+      moderationReasoning: `[Topic relevance: ${moderation.topicRelevanceScore}/10] ${moderation.reasoning}`,
 
-      // Flags
+      // Flags — map isSponsored into isSalesContent + isMarketing since DB has no isSponsored field
       isSafe: moderation.isSafe,
-      isSalesContent: moderation.flags.isSalesContent,
+      isSalesContent: moderation.flags.isSalesContent || moderation.flags.isSponsored,
       hasPromoCodes: moderation.flags.hasPromoCodes,
       isClickbait: moderation.flags.isClickbait,
       isSpam: moderation.flags.isSpam,
-      isMarketing: moderation.flags.isMarketing,
+      isMarketing: moderation.flags.isMarketing || moderation.flags.isSponsored,
       isOffTopic: moderation.flags.isOffTopic,
 
       autoApproved: autoApprove,
@@ -327,12 +438,13 @@ export async function scoreFeed(feedId: string): Promise<ScoringResult> {
     }
   })
 
-  console.log(`  ${autoApprove ? '✅' : autoReject ? '❌' : '⏳'} Score: ${qualityScore} | ${reasoning.substring(0, 60)}`)
+  console.log(`  ${autoApprove ? '✅' : autoReject ? '❌' : '⏳'} Score: ${qualityScore} | Topic: ${moderation.topicRelevanceScore}/10 | ${reasoning.substring(0, 60)}`)
 
   return {
     qualityScore,
     ruleBasedScore,
-    moderationBoost,
+    topicRelevanceScore: moderation.topicRelevanceScore,
+    moderationBoost: topicRelevancePoints + moderationBoost,
     autoApprove,
     autoReject,
     reasoning
@@ -379,63 +491,41 @@ function getMetadataScore(feed: any): number {
 }
 
 /**
- * Content Relevance Score (0-15)
- * Rewards tech/business news, penalizes product reviews and listicles
+ * Content Signal Score (-15 to +5, clamped 0-10)
+ *
+ * Penalty-focused: penalizes product reviews, listicles, and ad-like content.
+ * No generic keyword bonuses — topic relevance is handled by the LLM.
+ * Only small bonus for substantial long-form content (depth indicator).
  */
-function getContentRelevanceScore(feed: any): number {
+function getContentSignalScore(feed: any): number {
   const title = feed.title.toLowerCase()
   const summary = (feed.summary || '').toLowerCase()
-  const content = (feed.content || '').toLowerCase()
-  const combined = `${title} ${summary} ${content}`
 
   let score = 5  // Base score
 
-  // HIGH VALUE: Tech news keywords (+10 points)
-  const techNewsKeywords = [
-    'acquisition', 'merger', 'funding', 'raises', 'valuation',
-    'launches', 'announces', 'unveils', 'releases', 'introduces',
-    'partnership', 'collaboration', 'deal', 'investment',
-    'ai', 'artificial intelligence', 'machine learning', 'llm',
-    'startup', 'ipo', 'acquisition', 'breakthrough',
-    'research', 'study', 'report', 'analysis',
-    'ceo', 'founder', 'executive', 'leadership'
-  ]
-
-  const hasHighValueKeywords = techNewsKeywords.some(keyword => combined.includes(keyword))
-  if (hasHighValueKeywords) score += 10
-
-  // MEDIUM VALUE: Industry/company names (+5 points)
-  const companyKeywords = [
-    'apple', 'google', 'microsoft', 'amazon', 'meta', 'facebook',
-    'tesla', 'spacex', 'openai', 'anthropic', 'nvidia',
-    'intel', 'amd', 'qualcomm', 'samsung', 'sony'
-  ]
-
-  const mentionsCompany = companyKeywords.some(keyword => combined.includes(keyword))
-  if (mentionsCompany) score += 5
-
-  // PENALTY: Product reviews & listicles (-15 points)
-  const productReviewIndicators = [
+  // PENALTY: Product reviews & buying guides (-15 points)
+  const reviewIndicators = [
     'best ', 'top ', ' review', 'buying guide', 'to buy',
     'tested', 'comparison', 'vs ', 'versus',
-    'discount', 'sale', 'coupon', 'promo'
+    'discount', 'sale', 'coupon', 'promo',
+    '% off', 'save $', 'free trial', 'deal of the day'
   ]
 
-  const isProductReview = productReviewIndicators.some(indicator =>
-    title.includes(indicator) || summary.includes(indicator)
-  )
-  if (isProductReview) score -= 15
+  if (reviewIndicators.some(i => title.includes(i) || summary.includes(i))) score -= 15
 
   // PENALTY: Listicles (-10 points)
-  const listPattern = /^\d+\s+(best|top|ways|reasons|tips|things)/i
+  const listPattern = /^\d+\s+(best|top|ways|reasons|tips|things|tools|apps|must|essential|favorite)/i
   if (listPattern.test(title)) score -= 10
 
-  // BONUS: Timely content (+3 points)
-  const timelyKeywords = ['breaking', 'just', 'today', 'now', 'latest', 'new']
-  const hasTimeliness = timelyKeywords.some(keyword => title.includes(keyword))
-  if (hasTimeliness) score += 3
+  // BONUS: Substantial long-form content (+3 points)
+  // Longer content tends to have more depth and insight
+  if (feed.content && feed.content.length > 2000) score += 3
 
-  return Math.max(0, Math.min(15, score))  // Clamp to 0-15
+  // BONUS: Has original analysis indicators (+2 points)
+  const analysisIndicators = ['research', 'study', 'analysis', 'report', 'findings', 'data shows']
+  if (analysisIndicators.some(i => title.includes(i))) score += 2
+
+  return Math.max(0, Math.min(10, score))  // Clamp to 0-10
 }
 
 function extractDomain(url: string): string {
