@@ -1,5 +1,6 @@
 import { FeedList } from "./feed-list"
 import { FeedStats } from "./feed-stats"
+import { PlatformStatus } from "./platform-status"
 
 export default function AdminFeedsPage() {
   return (
@@ -12,6 +13,7 @@ export default function AdminFeedsPage() {
       </div>
 
       <FeedStats />
+      <PlatformStatus />
       <FeedList />
     </div>
   )

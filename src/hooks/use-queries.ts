@@ -20,6 +20,9 @@ export const queryKeys = {
   adminTopics: {
     all: ["admin", "topics"] as const,
   },
+  platformStatus: {
+    all: ["platform", "status"] as const,
+  },
 }
 
 // ============================================================================
@@ -190,6 +193,52 @@ export function useBulkApproveFeed() {
     onError: (_, { action }) => {
       toast.error(`Failed to ${action} selected feeds. Please try again.`)
     },
+  })
+}
+
+// ============================================================================
+// PLATFORM STATUS (Queue + GROQ Usage)
+// ============================================================================
+
+interface ModelUsage {
+  id: string
+  label: string
+  purpose: string
+  totalKeys: number
+  availableKeys: number
+  rpm: number
+  requests: {
+    today: number
+    dailyLimit: number
+    remaining: number
+    currentMinute: number
+  }
+  tokens: {
+    today: number
+    dailyLimit: number
+    remaining: number
+  }
+}
+
+interface PlatformStatus {
+  queue: {
+    queued: number
+    processing: number
+    total: number
+  }
+  generatedPosts: Record<string, number>
+  models: ModelUsage[]
+}
+
+export function useAdminPlatformStatus() {
+  return useQuery({
+    queryKey: queryKeys.platformStatus.all,
+    queryFn: async () => {
+      const response = await fetch("/api/admin/platform-status")
+      if (!response.ok) throw new Error("Failed to fetch platform status")
+      return response.json() as Promise<PlatformStatus>
+    },
+    refetchInterval: 15000, // Refresh every 15 seconds
   })
 }
 
