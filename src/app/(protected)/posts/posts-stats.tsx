@@ -1,7 +1,6 @@
 import { Calendar, CheckCircle, Clock, XCircle } from "lucide-react"
 import { cache } from "react"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
@@ -39,51 +38,57 @@ export async function PostsStats() {
 
   const stats = await getPostsStats(session.user.id)
 
+  const items = [
+    {
+      label: "Scheduled",
+      value: stats.scheduled,
+      icon: Clock,
+      accent: "text-blue-500",
+      bg: "bg-blue-500/10",
+      border: "border-l-blue-400",
+    },
+    {
+      label: "Published",
+      value: stats.published,
+      icon: CheckCircle,
+      accent: "text-emerald-500",
+      bg: "bg-emerald-500/10",
+      border: "border-l-emerald-400",
+    },
+    {
+      label: "Failed",
+      value: stats.failed,
+      icon: XCircle,
+      accent: "text-red-400",
+      bg: "bg-red-500/10",
+      border: "border-l-red-400",
+    },
+    {
+      label: "Today",
+      value: stats.today,
+      icon: Calendar,
+      accent: "text-amber-500",
+      bg: "bg-amber-500/10",
+      border: "border-l-amber-400",
+    },
+  ]
+
   return (
-    <div className="grid gap-4 md:grid-cols-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Scheduled</CardTitle>
-          <Clock className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.scheduled}</div>
-          <p className="text-xs text-muted-foreground">Waiting to be published</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Published</CardTitle>
-          <CheckCircle className="h-4 w-4 text-green-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.published}</div>
-          <p className="text-xs text-muted-foreground">Successfully posted</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Failed</CardTitle>
-          <XCircle className="h-4 w-4 text-destructive" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.failed}</div>
-          <p className="text-xs text-muted-foreground">Failed to publish</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Today</CardTitle>
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.today}</div>
-          <p className="text-xs text-muted-foreground">Posts for today</p>
-        </CardContent>
-      </Card>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className={`relative overflow-hidden rounded-xl border border-l-[3px] ${item.border} bg-card p-4 transition-shadow hover:shadow-md`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">{item.label}</span>
+            <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${item.bg}`}>
+              <item.icon className={`h-3.5 w-3.5 ${item.accent}`} />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold tracking-tight">{item.value}</div>
+        </div>
+      ))}
     </div>
   )
 }

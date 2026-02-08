@@ -2,9 +2,10 @@
 
 import { useRouter, useSearchParams } from "next/navigation"
 import { useMemo } from "react"
+import { Tags } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useTopics } from "@/hooks/use-queries"
 
 export function FeedFilters() {
@@ -31,41 +32,56 @@ export function FeedFilters() {
   }
 
   if (loading) {
-    return <div className="flex gap-2">{[1, 2, 3].map((i) => <Badge key={i} variant="outline" className="h-8 w-20 animate-pulse" />)}</div>
+    return (
+      <div className="flex gap-2">
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-8 w-20 rounded-full" />
+        ))}
+      </div>
+    )
   }
 
   if (topics.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-6 text-center">
-        <p className="text-muted-foreground">
-          No topics selected.{" "}
-          <Button variant="link" className="h-auto p-0" onClick={() => router.push("/topics")}>
-            Select topics
-          </Button>{" "}
-          to see content.
-        </p>
+      <div className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50/50 px-5 py-4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
+          <Tags className="h-4 w-4 text-amber-600" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium">No topics selected</p>
+          <p className="text-xs text-muted-foreground">Follow topics to see curated content here</p>
+        </div>
+        <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => router.push("/topics")}>
+          Choose Topics
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        variant={!currentTopic ? "default" : "outline"}
-        size="sm"
+    <div className="flex flex-wrap gap-1.5">
+      <button
         onClick={() => handleTopicChange(null)}
+        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
+          !currentTopic
+            ? "bg-foreground text-background shadow-sm"
+            : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+        }`}
       >
-        All Topics
-      </Button>
+        All
+      </button>
       {topics.map((topic) => (
-        <Button
+        <button
           key={topic.id}
-          variant={currentTopic === topic.id ? "default" : "outline"}
-          size="sm"
           onClick={() => handleTopicChange(topic.id)}
+          className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
+            currentTopic === topic.id
+              ? "bg-foreground text-background shadow-sm"
+              : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          }`}
         >
           {topic.name}
-        </Button>
+        </button>
       ))}
     </div>
   )
