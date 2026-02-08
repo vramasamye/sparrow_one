@@ -1,27 +1,24 @@
 import { NextResponse } from "next/server"
-import { dequeueNextJob, markJobCompleted, markJobFailed, getQueueStats, recoverStuckJobs } from "@/lib/queue"
+import { dequeueNextJob, markJobCompleted, markJobFailed, getQueueStats, recoverStuckJobs, syncOrphanedFeeds } from "@/lib/queue"
 import { generatePostsForFeed } from "@/lib/auto-generator"
 import { withDatabase } from "@/lib/cron-db"
 import { distributeToSubscribers } from "@/lib/auto-scheduler"
 import { verifyCronAuth } from "@/lib/cron-auth"
 
+export const maxDuration = 300 // 5 minutes
+
 /**
  * Process queue of approved feeds
  * This cron job:
- * 1. Picks up next feed from queue
- * 2. Generates Twitter + LinkedIn posts (with rate limit retry)
- * 3. Distributes to all subscribers
- * 4. Marks job as completed
- *
- * Vercel limits:
- * - Hobby: 10s timeout
- * - Pro: 60s timeout
- *
- * So we process ONE job per invocation to stay within limits
+ * 1. Syncs orphaned APPROVED feeds into the queue
+ * 2. Recovers stuck jobs from previous crashes
+ * 3. Processes up to 5 jobs per invocation
+ * 4. For each job: generate posts → distribute → mark complete
  */
 
+const MAX_JOBS_PER_RUN = 5
+
 export async function GET(request: Request) {
-  // Verify authorization
   const authHeader = request.headers.get("authorization")
   const url = new URL(request.url)
   const secretParam = url.searchParams.get("secret")
@@ -34,122 +31,123 @@ export async function GET(request: Request) {
   const startTime = Date.now()
 
   try {
-    const result = await withDatabase(async () => {
-      // 1. Recover any stuck jobs from previous crashes
+    // 1. Sync orphaned feeds and recover stuck jobs
+    const setupResult = await withDatabase(async () => {
+      const synced = await syncOrphanedFeeds()
       const recovered = await recoverStuckJobs()
-      if (recovered > 0) {
-        console.log(`  🔄 Recovered ${recovered} stuck jobs`)
-      }
-
-      // 2. Get queue stats
       const stats = await getQueueStats()
-      console.log(`  📊 Queue stats: ${stats.queued} queued, ${stats.processing} processing`)
-
-      if (stats.queued === 0) {
-        return { empty: true, stats }
-      }
-
-      // 3. Get next job from queue
-      const job = await dequeueNextJob()
-
-      return { empty: false, stats, job }
+      return { synced, recovered, stats }
     })
 
-    if (result.empty) {
+    if (setupResult.synced > 0) {
+      console.log(`  🔄 Synced ${setupResult.synced} orphaned feeds`)
+    }
+    if (setupResult.recovered > 0) {
+      console.log(`  🔄 Recovered ${setupResult.recovered} stuck jobs`)
+    }
+    console.log(`  📊 Queue stats: ${setupResult.stats.queued} queued, ${setupResult.stats.processing} processing`)
+
+    if (setupResult.stats.queued === 0) {
       return NextResponse.json({
         success: true,
         message: "Queue is empty",
-        stats: result.stats,
+        synced: setupResult.synced,
+        stats: setupResult.stats,
         duration: `${Date.now() - startTime}ms`
       })
     }
 
-    const { job, stats } = result
+    // 2. Process up to MAX_JOBS_PER_RUN jobs
+    const results: Array<{
+      feedId: string
+      success: boolean
+      usersScheduled?: number
+      twitterScheduled?: number
+      linkedinScheduled?: number
+      error?: string
+    }> = []
 
-    if (!job) {
-      return NextResponse.json({
-        success: true,
-        message: "No jobs available",
-        stats,
-        duration: `${Date.now() - startTime}ms`
-      })
+    for (let i = 0; i < MAX_JOBS_PER_RUN; i++) {
+      const job = await withDatabase(async () => dequeueNextJob())
+
+      if (!job) {
+        console.log(`  📭 No more jobs in queue (processed ${i} this run)`)
+        break
+      }
+
+      console.log(`  📝 [${i + 1}/${MAX_JOBS_PER_RUN}] Processing feed ${job.feedId}`)
+
+      try {
+        // Generate posts
+        console.log(`  🤖 Generating posts...`)
+        const genResult = await withDatabase(async () => {
+          return await generatePostsForFeed(job.feedId)
+        })
+
+        if (!genResult.success) {
+          await withDatabase(async () => {
+            await markJobFailed(job, genResult.error || "Generation failed")
+          })
+          results.push({ feedId: job.feedId, success: false, error: genResult.error })
+          console.log(`  ❌ Generation failed for ${job.feedId}: ${genResult.error}`)
+          continue
+        }
+
+        // Distribute to subscribers
+        console.log(`  📢 Distributing to subscribers...`)
+        const distResult = await withDatabase(async () => {
+          return await distributeToSubscribers(job.feedId)
+        })
+
+        if (!distResult.success) {
+          await withDatabase(async () => {
+            await markJobFailed(job, `Distribution failed: ${distResult.errors.join(", ")}`)
+          })
+          results.push({ feedId: job.feedId, success: false, error: distResult.errors.join(", ") })
+          console.log(`  ❌ Distribution failed for ${job.feedId}`)
+          continue
+        }
+
+        // Mark complete
+        await withDatabase(async () => {
+          await markJobCompleted(job)
+        })
+
+        results.push({
+          feedId: job.feedId,
+          success: true,
+          usersScheduled: distResult.usersScheduled,
+          twitterScheduled: distResult.twitterScheduled,
+          linkedinScheduled: distResult.linkedinScheduled,
+        })
+        console.log(`  ✅ Feed ${job.feedId}: ${distResult.usersScheduled} users, ${distResult.twitterScheduled} tweets, ${distResult.linkedinScheduled} linkedin`)
+
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : "Unknown error"
+        await withDatabase(async () => {
+          await markJobFailed(job, errMsg)
+        }).catch(() => {}) // Don't fail the whole run if cleanup fails
+        results.push({ feedId: job.feedId, success: false, error: errMsg })
+        console.error(`  ❌ Error processing feed ${job.feedId}:`, error)
+      }
     }
 
-    console.log(`  📝 Processing job: Feed ${job.feedId}`)
-
-    // 4. Generate posts (with rate limit retry)
-    console.log(`  🤖 Generating posts...`)
-    const genResult = await withDatabase(async () => {
-      return await generatePostsForFeed(job.feedId)
-    })
-
-    if (!genResult.success) {
-      await withDatabase(async () => {
-        await markJobFailed(job, genResult.error || "Generation failed")
-      })
-      return NextResponse.json({
-        success: false,
-        error: "Generation failed",
-        details: genResult.error,
-        feedId: job.feedId,
-        duration: `${Date.now() - startTime}ms`
-      }, { status: 500 })
-    }
-
-    console.log(`  ✅ Posts generated successfully`)
-
-    // 5. Distribute to subscribers
-    console.log(`  📢 Distributing to subscribers...`)
-    const distResult = await withDatabase(async () => {
-      return await distributeToSubscribers(job.feedId)
-    })
-
-    if (!distResult.success) {
-      await withDatabase(async () => {
-        await markJobFailed(job, `Distribution failed: ${distResult.errors.join(", ")}`)
-      })
-      return NextResponse.json({
-        success: false,
-        error: "Distribution failed",
-        details: distResult.errors,
-        feedId: job.feedId,
-        duration: `${Date.now() - startTime}ms`
-      }, { status: 500 })
-    }
-
-    console.log(`  ✅ Distributed successfully`)
-
-    // 6. Mark job as completed
-    await withDatabase(async () => {
-      await markJobCompleted(job)
-    })
-
+    const finalStats = await withDatabase(async () => getQueueStats())
     const duration = Date.now() - startTime
+    const successCount = results.filter(r => r.success).length
+    const failCount = results.filter(r => !r.success).length
 
-    console.log(`✅ Queue processing completed in ${duration}ms`)
-    console.log(`   Feed: ${job.feedId}`)
-    console.log(`   Users scheduled: ${distResult.usersScheduled}`)
-    console.log(`   Twitter posts: ${distResult.twitterScheduled}`)
-    console.log(`   LinkedIn posts: ${distResult.linkedinScheduled}`)
-
-    const finalStats = await withDatabase(async () => {
-      return await getQueueStats()
-    })
+    console.log(`✅ Queue processing completed in ${duration}ms — ${successCount} succeeded, ${failCount} failed, ${finalStats.queued} remaining`)
 
     return NextResponse.json({
       success: true,
       duration: `${duration}ms`,
-      feedId: job.feedId,
-      generation: {
-        success: genResult.success,
-      },
-      distribution: {
-        usersScheduled: distResult.usersScheduled,
-        twitterScheduled: distResult.twitterScheduled,
-        linkedinScheduled: distResult.linkedinScheduled,
-        errors: distResult.errors
-      },
-      stats: finalStats
+      synced: setupResult.synced,
+      processed: results.length,
+      succeeded: successCount,
+      failed: failCount,
+      results,
+      stats: finalStats,
     })
 
   } catch (error) {

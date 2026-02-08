@@ -4,16 +4,24 @@ import { PlatformStatus } from "./platform-status"
 
 export default function AdminFeedsPage() {
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Feed Approval</h1>
-        <p className="text-muted-foreground">
-          Review and approve pending feeds for AI content generation
-        </p>
+    <div className="mx-auto max-w-6xl space-y-6">
+      {/* Page Header */}
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Feed Approval</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Review, approve, and manage the content pipeline
+          </p>
+        </div>
       </div>
 
-      <FeedStats />
-      <PlatformStatus />
+      {/* Stats + Platform Status Row */}
+      <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
+        <FeedStats />
+        <PlatformStatus />
+      </div>
+
+      {/* Feed List */}
       <FeedList />
     </div>
   )

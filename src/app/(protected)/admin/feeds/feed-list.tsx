@@ -9,11 +9,9 @@ import { useAdminFeeds, useAdminTopics, useApproveFeed, useBulkApproveFeed } fro
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 
-// Parse topic relevance score from moderationReasoning prefix like "[Topic relevance: 8/10] ..."
 function parseTopicRelevance(reasoning: string | null): number | null {
   if (!reasoning) return null
   const match = reasoning.match(/\[Topic relevance:\s*(\d+)\/10\]/)
@@ -21,23 +19,28 @@ function parseTopicRelevance(reasoning: string | null): number | null {
 }
 
 function TopicRelevanceBadge({ score }: { score: number }) {
-  const variant = score >= 8 ? "default" : score >= 6 ? "secondary" : "destructive"
+  const color =
+    score >= 8
+      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+      : score >= 6
+        ? "border-amber-300 bg-amber-50 text-amber-700"
+        : "border-red-300 bg-red-50 text-red-700"
   return (
-    <Badge variant={variant} className="text-xs font-mono">
-      TR: {score}/10
-    </Badge>
+    <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold font-mono ${color}`}>
+      TR {score}/10
+    </span>
   )
 }
 
 function QualityScoreBadge({ score }: { score: number }) {
   const color =
     score >= 85
-      ? "bg-green-100 text-green-800 border-green-300"
+      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
       : score >= 60
-        ? "bg-yellow-100 text-yellow-800 border-yellow-300"
-        : "bg-red-100 text-red-800 border-red-300"
+        ? "border-amber-300 bg-amber-50 text-amber-700"
+        : "border-red-300 bg-red-50 text-red-700"
   return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${color}`}>
+    <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold font-mono ${color}`}>
       {score}/100
     </span>
   )
@@ -54,13 +57,11 @@ export function FeedList() {
   const status = searchParams.get("status") || "PENDING"
   const topicId = searchParams.get("topicId") || undefined
 
-  // React Query hooks
   const { data: feeds = [], isLoading: loading } = useAdminFeeds(status, topicId)
   const { data: topics = [] } = useAdminTopics()
   const approveFeedMutation = useApproveFeed()
   const bulkApproveMutation = useBulkApproveFeed()
 
-  // Clear selection when status or topic changes
   useEffect(() => {
     setSelectedFeeds([])
   }, [status, topicId])
@@ -152,7 +153,6 @@ export function FeedList() {
     { value: "REJECTED", label: "Rejected" },
   ]
 
-  // Group feeds by topic for display
   const feedsByTopic = feeds.reduce<Record<string, { topicName: string; feeds: any[] }>>((acc, feed: any) => {
     const tid = feed.topic.id
     if (!acc[tid]) {
@@ -164,14 +164,12 @@ export function FeedList() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-2">
         {[1, 2, 3].map((i) => (
-          <Card key={i}>
-            <CardContent className="p-4">
-              <Skeleton className="h-5 w-3/4 mb-2" />
-              <Skeleton className="h-4 w-1/2" />
-            </CardContent>
-          </Card>
+          <div key={i} className="rounded-xl border bg-card p-4">
+            <Skeleton className="h-4 w-3/4 mb-2" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
         ))}
       </div>
     )
@@ -179,29 +177,32 @@ export function FeedList() {
 
   return (
     <div className="space-y-4">
-      {/* Controls Bar */}
+      {/* Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {/* Status Tabs */}
-        <div className="flex gap-2">
+        <div className="inline-flex rounded-lg border bg-muted/40 p-0.5">
           {statusTabs.map((tab) => (
-            <Button
+            <button
               key={tab.value}
-              variant={status === tab.value ? "default" : "outline"}
-              size="sm"
               onClick={() => setStatus(tab.value)}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+                status === tab.value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {tab.label}
-            </Button>
+            </button>
           ))}
         </div>
 
         {/* Topic Filter */}
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Filter className="h-3.5 w-3.5 text-muted-foreground" />
           <select
             value={topicId || ""}
             onChange={(e) => setTopicFilter(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 rounded-lg border border-input bg-background px-3 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <option value="">All Topics</option>
             {topics.map((topic: any) => (
@@ -213,25 +214,23 @@ export function FeedList() {
         </div>
       </div>
 
-      {/* Bulk Action Bar */}
+      {/* Bulk Actions */}
       {feeds.length > 0 && status === "PENDING" && (
-        <div className="flex items-center justify-between rounded-lg border bg-muted/40 p-3">
+        <div className="flex items-center justify-between rounded-xl border bg-muted/30 px-4 py-2.5">
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 accent-primary"
-                checked={selectedFeeds.length === feeds.length && feeds.length > 0}
-                onChange={toggleSelectAll}
-                id="select-all"
-                aria-label="Select all feeds"
-              />
-              <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                Select All ({feeds.length})
-              </label>
-            </div>
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 rounded border-gray-300 accent-primary"
+              checked={selectedFeeds.length === feeds.length && feeds.length > 0}
+              onChange={toggleSelectAll}
+              id="select-all"
+              aria-label="Select all feeds"
+            />
+            <label htmlFor="select-all" className="cursor-pointer text-xs font-medium">
+              All ({feeds.length})
+            </label>
             {selectedFeeds.length > 0 && (
-              <span className="text-sm text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {selectedFeeds.length} selected
               </span>
             )}
@@ -241,40 +240,35 @@ export function FeedList() {
             <div className="flex gap-2">
               <Button
                 size="sm"
-                variant="outline"
-                className="border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700"
+                className="h-7 gap-1 bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700"
                 onClick={() => handleBulkAction("approve")}
                 disabled={isPending}
               >
-                <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                <CheckCircle className="h-3 w-3" />
                 Approve ({selectedFeeds.length})
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className="border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700"
+                className="h-7 gap-1 border-red-300 px-3 text-xs text-red-600 hover:bg-red-50"
                 onClick={() => handleBulkAction("reject")}
                 disabled={isPending}
               >
-                <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                Reject ({selectedFeeds.length})
+                <XCircle className="h-3 w-3" />
+                Reject
               </Button>
             </div>
           )}
         </div>
       )}
 
-      {/* Feed list */}
+      {/* Feed List */}
       {feeds.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No {status.toLowerCase()} feeds found
-            {topicId ? " for this topic" : ""}.
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border bg-card py-12 text-center text-sm text-muted-foreground">
+          No {status.toLowerCase()} feeds found{topicId ? " for this topic" : ""}.
+        </div>
       ) : topicId ? (
-        // Flat list when filtered by topic
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {feeds.map((feed: any) => (
             <FeedCard
               key={feed.id}
@@ -295,17 +289,16 @@ export function FeedList() {
           ))}
         </div>
       ) : (
-        // Grouped by topic when showing all
         <div className="space-y-6">
           {Object.entries(feedsByTopic).map(([tid, { topicName, feeds: topicFeeds }]) => (
             <div key={tid}>
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-sm font-semibold text-foreground">{topicName}</h3>
-                <Badge variant="outline" className="text-xs">
+              <div className="mb-2 flex items-center gap-2">
+                <h3 className="text-sm font-semibold">{topicName}</h3>
+                <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                   {topicFeeds.length}
                 </Badge>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {topicFeeds.map((feed: any) => (
                   <FeedCard
                     key={feed.id}
@@ -333,7 +326,6 @@ export function FeedList() {
   )
 }
 
-// Compact feed card component
 function FeedCard({
   feed,
   status,
@@ -365,184 +357,181 @@ function FeedCard({
     : null
 
   return (
-    <Card className={`transition-colors ${isSelected ? "border-primary bg-primary/5" : ""}`}>
-      <CardContent className="p-3">
-        {/* Main row: checkbox + title + badges + actions */}
-        <div className="flex items-start gap-3">
-          {/* Checkbox */}
-          {status === "PENDING" && (
-            <div className="pt-0.5">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 accent-primary"
-                checked={isSelected}
-                onChange={onToggleSelect}
-                aria-label={`Select ${feed.title}`}
-              />
+    <div
+      className={`rounded-xl border bg-card p-3 transition-all ${
+        isSelected ? "border-primary/40 bg-primary/[0.02] ring-1 ring-primary/20" : "hover:border-border/80"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        {/* Checkbox */}
+        {status === "PENDING" && (
+          <div className="pt-0.5">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 rounded border-gray-300 accent-primary"
+              checked={isSelected}
+              onChange={onToggleSelect}
+              aria-label={`Select ${feed.title}`}
+            />
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          {/* Title */}
+          <div className="flex items-start gap-2">
+            <a
+              href={feed.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 text-sm font-medium leading-snug hover:underline line-clamp-1"
+            >
+              {feed.title}
+            </a>
+            <a
+              href={feed.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label="Open article"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+
+          {/* Meta */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {showTopic && (
+              <Badge variant="secondary" className="h-5 text-[10px]">
+                {feed.topic.name}
+              </Badge>
+            )}
+            <span className="text-[11px] text-muted-foreground">{feed.rssFeed.name}</span>
+            {feed.publishedAt && (
+              <>
+                <span className="text-[10px] text-muted-foreground/50">&middot;</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {format(new Date(feed.publishedAt), "MMM d")}
+                </span>
+              </>
+            )}
+
+            {/* Scores */}
+            {feed.qualityScore !== null && <QualityScoreBadge score={feed.qualityScore} />}
+            {!feed.scoredAt && (
+              <span className="rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+                Unscored
+              </span>
+            )}
+            {topicRelevance !== null && <TopicRelevanceBadge score={topicRelevance} />}
+
+            {/* Auto badges */}
+            {feed.autoApproved && (
+              <span className="rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
+                Auto
+              </span>
+            )}
+            {feed.autoRejected && (
+              <span className="rounded-md border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
+                Auto-Rej
+              </span>
+            )}
+
+            {/* Safety flags */}
+            {feed.isSalesContent && (
+              <Badge variant="destructive" className="h-5 text-[10px]">Sales</Badge>
+            )}
+            {feed.hasPromoCodes && (
+              <Badge variant="destructive" className="h-5 text-[10px]">Promo</Badge>
+            )}
+            {feed.isClickbait && (
+              <Badge variant="destructive" className="h-5 text-[10px]">Clickbait</Badge>
+            )}
+            {feed.moderationCategory && feed.moderationCategory !== "safe" && (
+              <Badge variant="destructive" className="h-5 text-[10px]">
+                {feed.moderationCategory}
+              </Badge>
+            )}
+
+            {/* Expand */}
+            {feed.scoredAt && (
+              <button
+                onClick={onToggleExpand}
+                className="ml-auto text-muted-foreground hover:text-foreground"
+                aria-label={isExpanded ? "Collapse details" : "Expand details"}
+              >
+                {isExpanded ? (
+                  <ChevronUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Expanded */}
+          {isExpanded && feed.scoredAt && (
+            <div className="mt-2 rounded-lg border bg-muted/20 p-3 text-xs space-y-1.5">
+              {feed.summary && (
+                <p className="text-muted-foreground leading-relaxed line-clamp-2">{feed.summary}</p>
+              )}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-muted-foreground">
+                {feed.sourceAuthorityScore !== null && (
+                  <span>Source: {feed.sourceAuthorityScore}/20</span>
+                )}
+                {feed.recencyScore !== null && (
+                  <span>Recency: {feed.recencyScore}/15</span>
+                )}
+                {feed.metadataScore !== null && (
+                  <span>Meta: {feed.metadataScore}/15</span>
+                )}
+                {feed.moderationScore !== null && (
+                  <span>Conf: {Math.round(feed.moderationScore * 100)}%</span>
+                )}
+              </div>
+              {cleanReasoning && (
+                <p className="text-muted-foreground">
+                  <span className="font-medium text-foreground/70">AI:</span> {cleanReasoning}
+                </p>
+              )}
             </div>
           )}
 
-          {/* Content */}
-          <div className="flex-1 min-w-0">
-            {/* Title row */}
-            <div className="flex items-start gap-2">
-              <a
-                href={feed.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-medium hover:underline line-clamp-1 flex-1"
+          {/* Pending Actions */}
+          {status === "PENDING" && (
+            <div className="mt-2 flex items-center gap-2">
+              <Button
+                size="sm"
+                className="h-7 gap-1 bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700"
+                onClick={() => onAction(feed.id, "approve")}
+                disabled={isPending}
               >
-                {feed.title}
-              </a>
-              <a
-                href={feed.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground shrink-0"
-                aria-label="Open article"
+                <CheckCircle className="h-3 w-3" />
+                Approve
+              </Button>
+              <Input
+                placeholder="Reason (optional)"
+                className="h-7 max-w-[180px] text-xs"
+                value={rejectionReason}
+                onChange={(e) => onRejectionReasonChange(e.target.value)}
+                name={`rejection-reason-${feed.id}`}
+                autoComplete="off"
+                aria-label="Rejection reason"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 border-red-300 px-3 text-xs text-red-600 hover:bg-red-50"
+                onClick={() => onAction(feed.id, "reject")}
+                disabled={isPending}
               >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+                <XCircle className="h-3 w-3" />
+                Reject
+              </Button>
             </div>
-
-            {/* Meta row */}
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {showTopic && (
-                <Badge variant="secondary" className="text-xs">
-                  {feed.topic.name}
-                </Badge>
-              )}
-              <span className="text-xs text-muted-foreground">
-                {feed.rssFeed.name}
-              </span>
-              {feed.publishedAt && (
-                <span className="text-xs text-muted-foreground">
-                  {format(new Date(feed.publishedAt), "MMM d")}
-                </span>
-              )}
-
-              {/* Scores */}
-              {feed.qualityScore !== null && (
-                <QualityScoreBadge score={feed.qualityScore} />
-              )}
-              {!feed.scoredAt && (
-                <Badge variant="outline" className="text-xs border-yellow-400 text-yellow-600">
-                  Unscored
-                </Badge>
-              )}
-              {topicRelevance !== null && (
-                <TopicRelevanceBadge score={topicRelevance} />
-              )}
-
-              {/* Status badges */}
-              {feed.autoApproved && (
-                <Badge variant="outline" className="text-xs border-green-400 text-green-600">
-                  Auto-Approved
-                </Badge>
-              )}
-              {feed.autoRejected && (
-                <Badge variant="outline" className="text-xs border-red-400 text-red-600">
-                  Auto-Rejected
-                </Badge>
-              )}
-
-              {/* Safety flags */}
-              {feed.isSalesContent && (
-                <Badge variant="destructive" className="text-xs">Sales</Badge>
-              )}
-              {feed.hasPromoCodes && (
-                <Badge variant="destructive" className="text-xs">Promo</Badge>
-              )}
-              {feed.isClickbait && (
-                <Badge variant="destructive" className="text-xs">Clickbait</Badge>
-              )}
-              {feed.moderationCategory && feed.moderationCategory !== "safe" && (
-                <Badge variant="destructive" className="text-xs">
-                  {feed.moderationCategory}
-                </Badge>
-              )}
-
-              {/* Expand toggle */}
-              {feed.scoredAt && (
-                <button
-                  onClick={onToggleExpand}
-                  className="text-muted-foreground hover:text-foreground ml-auto"
-                  aria-label={isExpanded ? "Collapse details" : "Expand details"}
-                >
-                  {isExpanded ? (
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  ) : (
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  )}
-                </button>
-              )}
-            </div>
-
-            {/* Expanded details */}
-            {isExpanded && feed.scoredAt && (
-              <div className="mt-2 rounded border bg-muted/30 p-2 text-xs space-y-1">
-                {feed.summary && (
-                  <p className="text-muted-foreground line-clamp-2">{feed.summary}</p>
-                )}
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-                  {feed.sourceAuthorityScore !== null && (
-                    <span>Source: {feed.sourceAuthorityScore}/20</span>
-                  )}
-                  {feed.recencyScore !== null && (
-                    <span>Recency: {feed.recencyScore}/15</span>
-                  )}
-                  {feed.metadataScore !== null && (
-                    <span>Metadata: {feed.metadataScore}/15</span>
-                  )}
-                  {feed.moderationScore !== null && (
-                    <span>Confidence: {Math.round(feed.moderationScore * 100)}%</span>
-                  )}
-                </div>
-                {cleanReasoning && (
-                  <p className="text-muted-foreground">
-                    <span className="font-medium">AI:</span> {cleanReasoning}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Actions for PENDING */}
-            {status === "PENDING" && (
-              <div className="flex items-center gap-2 mt-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700"
-                  onClick={() => onAction(feed.id, "approve")}
-                  disabled={isPending}
-                >
-                  <CheckCircle className="mr-1 h-3 w-3" />
-                  Approve
-                </Button>
-                <Input
-                  placeholder="Reason (optional)"
-                  className="h-7 text-xs max-w-[200px]"
-                  value={rejectionReason}
-                  onChange={(e) => onRejectionReasonChange(e.target.value)}
-                  name={`rejection-reason-${feed.id}`}
-                  autoComplete="off"
-                  aria-label="Rejection reason"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => onAction(feed.id, "reject")}
-                  disabled={isPending}
-                >
-                  <XCircle className="mr-1 h-3 w-3" />
-                  Reject
-                </Button>
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

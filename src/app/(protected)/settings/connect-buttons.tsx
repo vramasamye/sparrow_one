@@ -30,11 +30,17 @@ export function ConnectButton({ platform, disabled }: ConnectButtonProps) {
   }
 
   return (
-    <Button onClick={handleConnect} disabled={loading || disabled}>
+    <Button
+      onClick={handleConnect}
+      disabled={loading || disabled}
+      variant="outline"
+      size="sm"
+      className="w-full gap-2"
+    >
       {loading ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
       ) : (
-        <Plus className="mr-2 h-4 w-4" />
+        <Plus className="h-3.5 w-3.5" />
       )}
       Connect
     </Button>
@@ -71,11 +77,17 @@ export function DisconnectButton({ platform, accountId }: DisconnectButtonProps)
   }
 
   return (
-    <Button variant="outline" onClick={handleDisconnect} disabled={loading}>
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleDisconnect}
+      disabled={loading}
+      className="w-full gap-2 text-muted-foreground hover:text-destructive"
+    >
       {loading ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
       ) : (
-        <LogOut className="mr-2 h-4 w-4" />
+        <LogOut className="h-3.5 w-3.5" />
       )}
       Disconnect
     </Button>

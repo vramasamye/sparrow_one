@@ -146,6 +146,55 @@ export async function removeJobsForFeed(feedId: string): Promise<number> {
 }
 
 /**
+ * Sync orphaned APPROVED feeds that are not in the Redis queue
+ * This catches feeds that were approved but never enqueued (e.g., Redis flush,
+ * failed enqueue, or feeds approved before the queue system existed).
+ */
+export async function syncOrphanedFeeds(): Promise<number> {
+  // Find APPROVED feeds with no GeneratedPost (never processed)
+  const orphanedFeeds = await prisma.feed.findMany({
+    where: {
+      status: "APPROVED",
+      generatedPosts: { none: {} }, // No generated post exists
+    },
+    select: { id: true, approvedBy: true, approvedAt: true },
+    take: 20, // Cap per sync run
+    orderBy: { approvedAt: "asc" },
+  })
+
+  if (orphanedFeeds.length === 0) {
+    return 0
+  }
+
+  // Check which ones are already in the queue
+  const queuedJobs = await redis.zrange(QUEUE_KEY, 0, -1)
+  const queuedFeedIds = new Set(
+    queuedJobs.map((j) => {
+      try { return JSON.parse(j).feedId } catch { return null }
+    }).filter(Boolean)
+  )
+
+  const processingJobs = await redis.smembers(PROCESSING_KEY)
+  for (const j of processingJobs) {
+    try { queuedFeedIds.add(JSON.parse(j).feedId) } catch {}
+  }
+
+  let enqueuedCount = 0
+  for (const feed of orphanedFeeds) {
+    if (!queuedFeedIds.has(feed.id)) {
+      await enqueueApprovedFeed(feed.id, feed.approvedBy || "SYSTEM_SYNC")
+      enqueuedCount++
+    }
+  }
+
+  if (enqueuedCount > 0) {
+    console.log(`🔄 Synced ${enqueuedCount} orphaned APPROVED feeds into queue`)
+  }
+
+  return enqueuedCount
+}
+
+/**
  * Recover jobs stuck in processing (call this on startup or periodically)
  * Validates feed existence before re-queuing to avoid orphaned jobs
  */
